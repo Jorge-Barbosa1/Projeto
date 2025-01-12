@@ -1,0 +1,22 @@
+version: '3.9'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend_app
+    environment:
+      - OPENAI_API_KEY=YOUR_OPENAI_API_KEY  # Substitua pela sua key real ou use .env
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend_app
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"  
