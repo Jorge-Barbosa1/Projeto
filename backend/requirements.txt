@@ -1,7 +1,7 @@
 fastapi
 uvicorn
-langchain-ollama
-pydantic
-PyMuPDF
-SpeechRecognition
+google-generativeai
 pydub
+PyMuPDF
+speechrecognition
+python-multipart

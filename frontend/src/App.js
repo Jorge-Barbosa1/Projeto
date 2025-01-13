@@ -1,119 +1,101 @@
 import React, { useState } from "react";
 import axios from "axios";
-import Tree from "react-d3-tree";
+import * as d3 from "d3";
 
 function App() {
+  const [mindmapData, setMindmapData] = useState(null);
   const [prompt, setPrompt] = useState("");
   const [pdfFile, setPdfFile] = useState(null);
   const [audioFile, setAudioFile] = useState(null);
-  const [modelResponse, setModelResponse] = useState("");
-  const [mindmapData, setMindmapData] = useState(null);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleSubmit = async (event) => {
+    event.preventDefault();
 
-    // Monta o form data
     const formData = new FormData();
     formData.append("prompt", prompt);
     if (pdfFile) formData.append("pdf_file", pdfFile);
     if (audioFile) formData.append("audio_file", audioFile);
 
     try {
-      // Ajuste a URL se necessário (ex.: ip do container)
-      const response = await axios.post("http://localhost:8000/process-file", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      setModelResponse(response.data.model_response);
-
-      // Exemplo de "mindmap": { "Tópico1": ["Sub1", "Sub2"], "Tópico2": ["Sub3"] }
-      const mapData = response.data.mindmap;
-
-      // Converter esse dicionário para o formato que o "react-d3-tree" gosta:
-      // { name: 'Root', children: [{ name:'Tópico1', children:[{name:'Sub1'},{name:'Sub2'}] }, ...] }
-      const convertedTree = convertToTreeData(mapData);
-      setMindmapData(convertedTree);
-
-    } catch (err) {
-      console.error("Erro ao enviar dados:", err);
+      const response = await axios.post("http://localhost:8000/process-file", formData);
+      setMindmapData(response.data.mindmap);
+    } catch (error) {
+      console.error("Erro ao gerar mapa mental:", error);
     }
   };
 
-  const convertToTreeData = (mindmapObj) => {
-    // Cria um nó raíz fictício
-    const root = {
-      name: "Mapa Mental",
-      children: [],
-    };
+  const renderMindmap = (data) => {
+    if (!data) return;
 
-    // Para cada tópico, cria um node
-    for (const topic of Object.keys(mindmapObj)) {
-      const subtopics = mindmapObj[topic];
-      const topicNode = {
-        name: topic,
-        children: subtopics.map((s) => ({ name: s }))
-      };
-      root.children.push(topicNode);
-    }
+    const svg = d3.select("#mindmap");
+    svg.selectAll("*").remove(); // Limpar o SVG anterior
 
-    return root;
+    const width = 800;
+    const height = 600;
+
+    const treeLayout = d3.tree().size([height, width - 200]);
+
+    const hierarchyData = d3.hierarchy(data, (d) => d.children || Object.entries(d).map(([k, v]) => ({ name: k, children: v })));
+
+    const treeData = treeLayout(hierarchyData);
+
+    const nodes = treeData.descendants();
+    const links = treeData.links();
+
+    // Cria links
+    svg
+      .selectAll(".link")
+      .data(links)
+      .enter()
+      .append("line")
+      .attr("class", "link")
+      .attr("x1", (d) => d.source.y)
+      .attr("y1", (d) => d.source.x)
+      .attr("x2", (d) => d.target.y)
+      .attr("y2", (d) => d.target.x)
+      .attr("stroke", "#ccc");
+
+    // Cria nós
+    const node = svg
+      .selectAll(".node")
+      .data(nodes)
+      .enter()
+      .append("g")
+      .attr("class", "node")
+      .attr("transform", (d) => `translate(${d.y},${d.x})`);
+
+    // Adiciona círculos aos nós
+    node
+      .append("circle")
+      .attr("r", 10)
+      .attr("fill", "lightblue")
+      .attr("stroke", "black");
+
+    // Adiciona texto aos nós
+    node
+      .append("text")
+      .attr("dy", 3)
+      .attr("x", (d) => (d.children ? -15 : 15))
+      .style("text-anchor", (d) => (d.children ? "end" : "start"))
+      .text((d) => d.data.name || d.data);
   };
 
   return (
-    <div style={{ width: "100vw", height: "100vh", padding: "1rem" }}>
-      <h1>Gerador de Mapa Mental (OpenAI)</h1>
-      <form onSubmit={handleSubmit} style={{ marginBottom: "1rem" }}>
-        <div>
-          <label>Prompt:</label>
-          <br />
-          <textarea
-            rows={3}
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-          />
-        </div>
-
-        <div>
-          <label>PDF (opcional):</label>
-          <br />
-          <input
-            type="file"
-            accept=".pdf"
-            onChange={(e) => setPdfFile(e.target.files[0])}
-          />
-        </div>
-
-        <div>
-          <label>Áudio (opcional):</label>
-          <br />
-          <input
-            type="file"
-            accept=".mp3, .wav"
-            onChange={(e) => setAudioFile(e.target.files[0])}
-          />
-        </div>
-
-        <button type="submit" style={{ marginTop: "1rem" }}>Enviar</button>
+    <div>
+      <h1>Gerador de Mapa Mental</h1>
+      <form onSubmit={handleSubmit}>
+        <input
+          type="text"
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Digite o prompt"
+        />
+        <input type="file" onChange={(e) => setPdfFile(e.target.files[0])} />
+        <input type="file" onChange={(e) => setAudioFile(e.target.files[0])} />
+        <button type="submit">Gerar Mapa Mental</button>
       </form>
-
-      {modelResponse && (
-        <div style={{ marginBottom: "1rem" }}>
-          <h2>Resposta do Modelo:</h2>
-          <pre>{modelResponse}</pre>
-        </div>
-      )}
-
-      {mindmapData && (
-        <div style={{ width: "100%", height: "600px", border: "1px solid #ccc" }}>
-          {/* Para melhor visualização, orientamos "horizontal" */}
-          <Tree
-            data={mindmapData}
-            orientation="horizontal"
-            translate={{ x: 300, y: 300 }}
-            zoomable={true}
-          />
-        </div>
-      )}
+      <svg id="mindmap" width="800" height="600"></svg>
+      {mindmapData && renderMindmap(mindmapData)}
     </div>
   );
 }

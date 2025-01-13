@@ -1,151 +1,121 @@
 from fastapi import FastAPI, File, UploadFile, Form
 from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import fitz  # PyMuPDF
+import os
+import google.generativeai as genai
+import fitz  # PyMuPDF para extrair texto de PDF
 import speech_recognition as sr
 from pydub import AudioSegment
 from io import BytesIO
-import os
-from langchain_ollama import OllamaLLM
 
+# Instância da aplicação FastAPI
 app = FastAPI()
 
-# Inicializa o LLM (Ollama):
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-MODEL_NAME = "llama3"
-llm = OllamaLLM(model=MODEL_NAME, base_url=OLLAMA_URL)
+# Configuração de CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Permite requisições de qualquer origem (use restrições em produção)
+    allow_credentials=True,
+    allow_methods=["*"],  # Permite todos os métodos HTTP (GET, POST, etc.)
+    allow_headers=["*"],  # Permite todos os headers
+)
 
-# Se quiser usar OpenAI, você pode comentar as linhas acima e usar algo como:
-# import openai
-# openai.api_key = os.getenv("OPENAI_API_KEY")
+# Configuração da API Gemini
+genai.configure(api_key="AIzaSyAzyh7zZkZGHdLW1lY6Gs9wA3gN_tSJE6U")
 
-# Modelo de dados (opcional) para retornar a estrutura do Mindmap
+
 class MindmapResponse(BaseModel):
+    model_response: str
     mindmap: dict
 
+def convert_audio_to_text(audio_file: bytes) -> str:
+    recognizer = sr.Recognizer()
+    try:
+        # Convertendo o arquivo para WAV
+        audio = AudioSegment.from_file(BytesIO(audio_file))
+        audio_wav = BytesIO()
+        audio.export(audio_wav, format="wav")
+        audio_wav.seek(0)
+
+        # Reconhecimento de fala
+        with sr.AudioFile(audio_wav) as source:
+            audio_data = recognizer.record(source)
+            return recognizer.recognize_google(audio_data)
+    except sr.UnknownValueError:
+        return "Áudio não compreendido."
+    except sr.RequestError as e:
+        print(f"Erro no reconhecimento de fala: {e}")
+        raise
+    except Exception as e:
+        print(f"Erro geral ao processar áudio: {e}")
+        raise
+
+def generate_mindmap_structure(text: str) -> dict:
+    """
+    Função para converter o texto em uma estrutura hierárquica para o mapa mental.
+    """
+    mindmap = {"title": "Mapa Mental", "children": []}
+    lines = text.strip().split("\n")
+    current_topic = None
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if line.startswith("**") and line.endswith("**"):  # Tópico principal
+            current_topic = {"title": line.strip("**"), "children": []}
+            mindmap["children"].append(current_topic)
+        elif current_topic:  # Subtópicos
+            current_topic["children"].append({"title": line})
+    return mindmap
+
+
+
 def extract_text_from_pdf(pdf_file: bytes) -> str:
-    """Extrai texto de um PDF usando PyMuPDF."""
+    """
+    Função para extrair texto de PDF usando PyMuPDF.
+    """
     text = ""
     try:
         with fitz.open(stream=pdf_file, filetype="pdf") as pdf:
             for page in pdf:
                 text += page.get_text()
     except Exception as e:
-        print(f"Erro processando PDF: {e}")
+        print(f"Erro ao processar PDF: {e}")
+        raise
     return text
 
-def convert_audio_to_text(audio_file: bytes) -> str:
-    """Converte áudio para texto usando SpeechRecognition + pydub."""
-    recognizer = sr.Recognizer()
-    try:
-        # Converte para wav
-        audio = AudioSegment.from_file(BytesIO(audio_file))
-        audio_wav = BytesIO()
-        audio.export(audio_wav, format="wav")
-        audio_wav.seek(0)
 
-        with sr.AudioFile(audio_wav) as source:
-            audio_data = recognizer.record(source)
-            return recognizer.recognize_google(audio_data)
-    except sr.UnknownValueError:
-        return "Não foi possível entender o áudio."
-    except Exception as e:
-        print(f"Erro processando áudio: {e}")
-        return "Erro ao converter áudio."
-
-@app.post("/process-file")
+@app.post("/process-file", response_model=MindmapResponse)
 async def process_file(
     prompt: str = Form(None),
     pdf_file: UploadFile = File(None),
-    audio_file: UploadFile = File(None)
+    audio_file: UploadFile = File(None),
 ):
-    """
-    Recebe:
-      - prompt (texto livre)
-      - pdf_file (opcional)
-      - audio_file (opcional)
+    try:
+        pdf_text = ""
+        if pdf_file is not None:
+            pdf_bytes = await pdf_file.read()
+            pdf_text = extract_text_from_pdf(pdf_bytes)
+            #print("Texto extraído do PDF:", pdf_text)
 
-    Retorna:
-      - JSON com a resposta do LLM e a estrutura para o Mindmap.
-    """
+        audio_text = ""
+        if audio_file is not None:
+            audio_bytes = await audio_file.read()
+            audio_text = convert_audio_to_text(audio_bytes)
+            #print("Texto extraído do áudio:", audio_text)
 
-    # 1) extrair texto do PDF (se enviado)
-    pdf_text = ""
-    if pdf_file is not None:
-        pdf_bytes = await pdf_file.read()
-        pdf_text = extract_text_from_pdf(pdf_bytes)
+        input_text = (prompt or "") + "\n" + pdf_text + "\n" + audio_text
+        #print("Texto final enviado para a API Gemini:", input_text)
 
-    # 2) extrair texto do áudio (se enviado)
-    audio_text = ""
-    if audio_file is not None:
-        audio_bytes = await audio_file.read()
-        audio_text = convert_audio_to_text(audio_bytes)
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        response = model.generate_content(input_text)
+        #print("Resposta da API Gemini:", response.text)
 
-    # 3) define o texto base (prompt + pdf_text + audio_text)
-    input_text = ""
-    if prompt:
-        input_text += prompt + "\n\n"
-    if pdf_text:
-        input_text += pdf_text + "\n\n"
-    if audio_text:
-        input_text += audio_text + "\n\n"
-    
-    if not input_text.strip():
-        return JSONResponse(
-            status_code=400,
-            content={"error": "Nenhum texto enviado (prompt, PDF ou áudio)."}
-        )
+        mindmap_dict = generate_mindmap_structure(response.text)
+        return {"model_response": response.text, "mindmap": mindmap_dict}
 
-    # 4) chama a LLM (Ollama, OpenAI, etc.) para gerar o "texto estruturado" do MindMap
-    final_prompt = (
-        f"Escreve tópicos para fazer um mapa mental sobre o seguinte texto:\n\n{input_text}"
-        # Se quiser personalizar, pode inserir tokens de parada, etc.
-    )
-
-    # Se estiver usando Ollama:
-    response = llm.invoke(final_prompt, stop=["<|eot_id|>"])
-
-    # Se estiver usando OpenAI:
-    # response = openai.Completion.create(
-    #     model="text-davinci-003",
-    #     prompt=final_prompt,
-    #     max_tokens=1024
-    # )
-    # response = response["choices"][0]["text"]
-
-    # 5) aqui podemos armazenar a string do LLM em "response". 
-    #    Precisamos converter em estrutura JSON para o mindmap
-    mindmap = generate_mindmap_structure(response)
-
-    # 6) Retorna em JSON
-    return {
-        "model_response": response, 
-        "mindmap": mindmap
-    }
-
-def generate_mindmap_structure(text: str) -> dict:
-    """
-    Exemplo simples que lê o texto linha a linha:
-    Exemplo (texto do LLM):
-      Tópico1:
-        Subtópico A
-        Subtópico B
-      Tópico2:
-        Subtópico C
-    Retorna { "Tópico1": ["Subtópico A", "Subtópico B"], "Tópico2": ["Subtópico C"] }
-    """
-    mindmap = {}
-    lines = text.strip().split('\n')
-    
-    current_topic = None
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        if line.endswith(':'):
-            current_topic = line[:-1].strip()
-            mindmap[current_topic] = []
-        else:
-            if current_topic:
-                mindmap[current_topic].append(line)
-    return mindmap
+    except Exception as e:
+        print(f"Erro no backend: {e}")
+        raise

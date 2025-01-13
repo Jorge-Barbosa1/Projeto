@@ -7,7 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: backend_app
     environment:
-      - OPENAI_API_KEY=YOUR_OPENAI_API_KEY  # Substitua pela sua key real ou use .env
+      - OPENAI_KEY
     ports:
       - "8000:8000"
 
@@ -19,4 +19,4 @@ services:
     depends_on:
       - backend
     ports:
-      - "3000:3000"  
+      - "3000:3000"   # ou "5173:5173" se for Vite
