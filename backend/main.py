@@ -22,7 +22,7 @@ app.add_middleware(
 )
 
 # Configuração da API Gemini
-genai.configure(api_key="AIzaSyAzyh7zZkZGHdLW1lY6Gs9wA3gN_tSJE6U")
+genai.configure(api_key="") API_KEY
 
 
 class MindmapResponse(BaseModel):
