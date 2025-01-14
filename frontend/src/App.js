@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import * as d3 from "d3";
+import "./App.css";
 
 function App() {
   const [mindmapData, setMindmapData] = useState(null);
@@ -28,17 +29,14 @@ function App() {
     if (!data) return;
 
     const svg = d3.select("#mindmap");
-    svg.selectAll("*").remove(); // Limpar o SVG anterior
+    svg.selectAll("*").remove();
 
-    const width = 800;
-    const height = 600;
-
+    const width = 1200; // Largura do SVG
+    const height = 800; // Altura do SVG
     const treeLayout = d3.tree().size([height, width - 200]);
-
-    const hierarchyData = d3.hierarchy(data, (d) => d.children || Object.entries(d).map(([k, v]) => ({ name: k, children: v })));
+    const hierarchyData = d3.hierarchy(data, (d) => d.children);
 
     const treeData = treeLayout(hierarchyData);
-
     const nodes = treeData.descendants();
     const links = treeData.links();
 
@@ -64,38 +62,50 @@ function App() {
       .attr("class", "node")
       .attr("transform", (d) => `translate(${d.y},${d.x})`);
 
-    // Adiciona círculos aos nós
     node
       .append("circle")
       .attr("r", 10)
-      .attr("fill", "lightblue")
+      .attr("fill", "#007BFF")
       .attr("stroke", "black");
 
-    // Adiciona texto aos nós
     node
       .append("text")
-      .attr("dy", 3)
-      .attr("x", (d) => (d.children ? -15 : 15))
+      .attr("dy", 4)
+      .attr("x", (d) => (d.children ? -20 : 20))
       .style("text-anchor", (d) => (d.children ? "end" : "start"))
-      .text((d) => d.data.name || d.data);
+      .text((d) => d.data.title || d.data);
   };
 
   return (
-    <div>
-      <h1>Gerador de Mapa Mental</h1>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
-          placeholder="Digite o prompt"
-        />
-        <input type="file" onChange={(e) => setPdfFile(e.target.files[0])} />
-        <input type="file" onChange={(e) => setAudioFile(e.target.files[0])} />
-        <button type="submit">Gerar Mapa Mental</button>
-      </form>
-      <svg id="mindmap" width="800" height="600"></svg>
-      {mindmapData && renderMindmap(mindmapData)}
+    <div style={{ display: "flex", height: "100vh" }}>
+      {/* Coluna da esquerda */}
+      <div style={{ flex: 1, padding: "20px", borderRight: "1px solid #ccc" }}>
+        <h1>Gerador de Mapa Mental</h1>
+        <form onSubmit={handleSubmit}>
+          <div>
+            <input
+              type="text"
+              value={prompt}
+              onChange={(e) => setPrompt(e.target.value)}
+              placeholder="Digite o prompt"
+              style={{ width: "100%", padding: "10px", marginBottom: "10px" }}
+            />
+          </div>
+          <div>
+            <input type="file" onChange={(e) => setPdfFile(e.target.files[0])} style={{ marginBottom: "10px" }} />
+          </div>
+          <div>
+            <input type="file" onChange={(e) => setAudioFile(e.target.files[0])} style={{ marginBottom: "10px" }} />
+          </div>
+          <button type="submit" style={{ padding: "10px 20px", cursor: "pointer" }}>Gerar Mapa Mental</button>
+        </form>
+      </div>
+
+      {/* Coluna da direita */}
+      <div style={{ flex: 3, padding: "20px" }}>
+        <svg id="mindmap" width="100%" height="100%"></svg>
+        {mindmapData && renderMindmap(mindmapData)}
+      </div>
     </div>
   );
 }

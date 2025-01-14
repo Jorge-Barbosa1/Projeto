@@ -8,22 +8,27 @@ import fitz  # PyMuPDF para extrair texto de PDF
 import speech_recognition as sr
 from pydub import AudioSegment
 from io import BytesIO
+from dotenv import load_dotenv
 
+load_dotenv()
 # Instância da aplicação FastAPI
 app = FastAPI()
 
 # Configuração de CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permite requisições de qualquer origem (use restrições em produção)
+    allow_origins=["*"],  # Permitir todas as origens
     allow_credentials=True,
-    allow_methods=["*"],  # Permite todos os métodos HTTP (GET, POST, etc.)
-    allow_headers=["*"],  # Permite todos os headers
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Access-Control-Allow-Origin"],  # Exponha o header necessário
 )
 
-# Configuração da API Gemini
-genai.configure(api_key="") API_KEY
+gemini_api_key = os.getenv("GEMINI_KEY")
+if not gemini_api_key:
+    raise ValueError("Erro: A chave GEMINI_KEY não foi encontrada no ambiente ou no arquivo .env.")
 
+genai.configure(api_key=gemini_api_key)
 
 class MindmapResponse(BaseModel):
     model_response: str
@@ -57,18 +62,36 @@ def generate_mindmap_structure(text: str) -> dict:
     """
     mindmap = {"title": "Mapa Mental", "children": []}
     lines = text.strip().split("\n")
-    current_topic = None
+    stack = [mindmap]  # Pilha para manter hierarquia
 
     for line in lines:
         line = line.strip()
         if not line:
             continue
+
         if line.startswith("**") and line.endswith("**"):  # Tópico principal
-            current_topic = {"title": line.strip("**"), "children": []}
-            mindmap["children"].append(current_topic)
-        elif current_topic:  # Subtópicos
-            current_topic["children"].append({"title": line})
+            node = {"title": line.strip("**"), "children": []}
+            mindmap["children"].append(node)
+            stack = [mindmap, node]  # Atualiza a pilha com o novo tópico principal
+
+        elif line.startswith("*"):  # Subtópico
+            if len(stack) > 1:  # Verifica se há um tópico principal na pilha
+                node = {"title": line.strip("*"), "children": []}
+                stack[-1]["children"].append(node)
+                stack.append(node)  # Adiciona o subtópico à pilha
+            else:
+                print(f"Subtópico encontrado sem tópico principal: {line}")
+
+        else:  # Sub-subtópico
+            if len(stack) > 2:  # Verifica se há pelo menos um subtópico na pilha
+                node = {"title": line, "children": []}
+                stack[-1]["children"].append(node)
+            else:
+                print(f"Sub-subtópico encontrado sem subtópico: {line}")
+
     return mindmap
+
+
 
 
 

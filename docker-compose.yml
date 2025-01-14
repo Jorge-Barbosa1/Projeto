@@ -7,9 +7,11 @@ services:
       dockerfile: Dockerfile
     container_name: backend_app
     environment:
-      - OPENAI_KEY
+      - GEMINI_KEY
     ports:
       - "8000:8000"
+    env_file:
+      - .env
 
   frontend:
     build:
@@ -19,4 +21,4 @@ services:
     depends_on:
       - backend
     ports:
-      - "3000:3000"   # ou "5173:5173" se for Vite
+      - "3000:3000" 

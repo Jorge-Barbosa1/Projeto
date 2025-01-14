@@ -5,3 +5,4 @@ pydub
 PyMuPDF
 speechrecognition
 python-multipart
+python-dotenv

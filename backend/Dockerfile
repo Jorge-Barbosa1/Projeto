@@ -1,20 +1,20 @@
 FROM python:3.9-slim
 
-# Instala dependências do sistema (necessário para áudio)
+# Instalar dependências do sistema
 RUN apt-get update && apt-get install -y ffmpeg && apt-get clean
 
-# Define o diretório de trabalho
+# Configurar diretório de trabalho
 WORKDIR /app
 
-# Copia o requirements.txt e instala as dependências
+# Copiar o arquivo de requisitos
 COPY requirements.txt .
+
+# Atualizar pip e instalar dependências
+RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copia o código do backend
+# Copiar o código do projeto
 COPY . .
 
-# Expõe a porta 8000
-EXPOSE 8000
-
-# Comando padrão para rodar o backend
+# Comando padrão para iniciar a aplicação
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
