@@ -56,43 +56,18 @@ def convert_audio_to_text(audio_file: bytes) -> str:
         print(f"Erro geral ao processar áudio: {e}")
         raise
 
-def generate_mindmap_structure(text: str) -> dict:
+def generate_mindmap_structure(text: str) -> str:
     """
-    Função para converter o texto em uma estrutura hierárquica para o mapa mental.
+    Converte o texto em Markdown para estrutura do mapa mental.
     """
-    mindmap = {"title": "Mapa Mental", "children": []}
     lines = text.strip().split("\n")
-    stack = [mindmap]  # Pilha para manter hierarquia
-
+    markdown = "# Tópico Principal\n"
     for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-
-        if line.startswith("**") and line.endswith("**"):  # Tópico principal
-            node = {"title": line.strip("**"), "children": []}
-            mindmap["children"].append(node)
-            stack = [mindmap, node]  # Atualiza a pilha com o novo tópico principal
-
-        elif line.startswith("*"):  # Subtópico
-            if len(stack) > 1:  # Verifica se há um tópico principal na pilha
-                node = {"title": line.strip("*"), "children": []}
-                stack[-1]["children"].append(node)
-                stack.append(node)  # Adiciona o subtópico à pilha
-            else:
-                print(f"Subtópico encontrado sem tópico principal: {line}")
-
-        else:  # Sub-subtópico
-            if len(stack) > 2:  # Verifica se há pelo menos um subtópico na pilha
-                node = {"title": line, "children": []}
-                stack[-1]["children"].append(node)
-            else:
-                print(f"Sub-subtópico encontrado sem subtópico: {line}")
-
-    return mindmap
-
-
-
+        if line.startswith("**") and line.endswith("**"):  # Tópicos principais
+            markdown += f"## {line.strip('**')}\n"
+        else:  # Subtópicos
+            markdown += f"- {line.strip()}\n"
+    return markdown
 
 
 def extract_text_from_pdf(pdf_file: bytes) -> str:
@@ -110,7 +85,7 @@ def extract_text_from_pdf(pdf_file: bytes) -> str:
     return text
 
 
-@app.post("/process-file", response_model=MindmapResponse)
+@app.post("/process-file")
 async def process_file(
     prompt: str = Form(None),
     pdf_file: UploadFile = File(None),
@@ -121,24 +96,19 @@ async def process_file(
         if pdf_file is not None:
             pdf_bytes = await pdf_file.read()
             pdf_text = extract_text_from_pdf(pdf_bytes)
-            #print("Texto extraído do PDF:", pdf_text)
 
         audio_text = ""
         if audio_file is not None:
             audio_bytes = await audio_file.read()
             audio_text = convert_audio_to_text(audio_bytes)
-            #print("Texto extraído do áudio:", audio_text)
 
         input_text = (prompt or "") + "\n" + pdf_text + "\n" + audio_text
-        #print("Texto final enviado para a API Gemini:", input_text)
 
         model = genai.GenerativeModel("gemini-1.5-flash")
         response = model.generate_content(input_text)
-        #print("Resposta da API Gemini:", response.text)
 
-        mindmap_dict = generate_mindmap_structure(response.text)
-        return {"model_response": response.text, "mindmap": mindmap_dict}
-
+        markdown = generate_mindmap_structure(response.text)
+        return {"markdown": markdown}
     except Exception as e:
         print(f"Erro no backend: {e}")
         raise
