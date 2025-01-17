@@ -9,6 +9,7 @@ function App() {
   const [prompt, setPrompt] = useState("");
   const [pdfFile, setPdfFile] = useState(null);
   const [audioFile, setAudioFile] = useState(null);
+  const [model, setModel] = useState("gemini");
   const svgRef = useRef(null);
 
   useEffect(() => {
@@ -48,8 +49,24 @@ function App() {
             placeholder="Digite o prompt"
             style={{ width: "100%", padding: "10px", marginBottom: "10px" }}
           />
-          <input type="file" onChange={(e) => setPdfFile(e.target.files[0])} style={{ marginBottom: "10px" }} />
-          <input type="file" onChange={(e) => setAudioFile(e.target.files[0])} style={{ marginBottom: "10px" }} />
+          <select
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            style={{ width: "100%", padding: "10px", marginBottom: "10px" }}
+          >
+            <option value="gemini">Gemini</option>
+            <option value="ollama">Ollama</option>
+          </select>
+          <input
+            type="file"
+            onChange={(e) => setPdfFile(e.target.files[0])}
+            style={{ marginBottom: "10px" }}
+          />
+          <input
+            type="file"
+            onChange={(e) => setAudioFile(e.target.files[0])}
+            style={{ marginBottom: "10px" }}
+          />
           <button type="submit" style={{ padding: "10px 20px", cursor: "pointer" }}>
             Gerar Mapa Mental
           </button>
