@@ -2,6 +2,17 @@ import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { Transformer } from "markmap-lib";
 import { Markmap } from "markmap-view";
+import {
+  Container,
+  Box,
+  TextField,
+  Button,
+  Typography,
+  Select,
+  MenuItem,
+  InputLabel,
+  FormControl,
+} from "@mui/material";
 import "./App.css";
 
 function App() {
@@ -25,6 +36,7 @@ function App() {
 
     const formData = new FormData();
     formData.append("prompt", prompt);
+    formData.append("model", model);
     if (pdfFile) formData.append("pdf_file", pdfFile);
     if (audioFile) formData.append("audio_file", audioFile);
 
@@ -37,47 +49,65 @@ function App() {
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <Container maxWidth="lg" sx={{ display: "flex", height: "100vh", padding: 2 }}>
       {/* Coluna da esquerda */}
-      <div style={{ flex: 1, padding: "20px", borderRight: "1px solid #ccc" }}>
-        <h1>Gerador de Mapa Mental</h1>
-        <form onSubmit={handleSubmit}>
-          <input
-            type="text"
+      <Box
+        sx={{
+          flex: 1,
+          padding: 2,
+          borderRight: "1px solid #ccc",
+          display: "flex",
+          flexDirection: "column",
+          gap: 2,
+        }}
+      >
+        <Typography variant="h4" gutterBottom>
+          Gerador de Mapa Mental
+        </Typography>
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <TextField
+            label="Digite o prompt"
+            variant="outlined"
+            fullWidth
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Digite o prompt"
-            style={{ width: "100%", padding: "10px", marginBottom: "10px" }}
           />
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            style={{ width: "100%", padding: "10px", marginBottom: "10px" }}
-          >
-            <option value="gemini">Gemini</option>
-            <option value="ollama">Ollama</option>
-          </select>
-          <input
-            type="file"
-            onChange={(e) => setPdfFile(e.target.files[0])}
-            style={{ marginBottom: "10px" }}
-          />
-          <input
-            type="file"
-            onChange={(e) => setAudioFile(e.target.files[0])}
-            style={{ marginBottom: "10px" }}
-          />
-          <button type="submit" style={{ padding: "10px 20px", cursor: "pointer" }}>
+          <FormControl fullWidth>
+            <InputLabel>Modelo</InputLabel>
+            <Select value={model} onChange={(e) => setModel(e.target.value)}>
+              <MenuItem value="gemini">Gemini</MenuItem>
+              {/*<MenuItem value="ollama">Ollama</MenuItem>*/}
+              <MenuItem value="claude">ClaudeAI</MenuItem>
+              <MenuItem value="mistral">Mistral</MenuItem>
+            </Select>
+          </FormControl>
+          <Button variant="contained" component="label">
+            Escolher PDF
+            <input
+              type="file"
+              hidden
+              onChange={(e) => setPdfFile(e.target.files[0])}
+            />
+          </Button>
+          <Button variant="contained" component="label">
+            Escolher Áudio
+            <input
+              type="file"
+              hidden
+              onChange={(e) => setAudioFile(e.target.files[0])}
+            />
+          </Button>
+          <Button type="submit" variant="contained" color="primary" size="large">
             Gerar Mapa Mental
-          </button>
+          </Button>
         </form>
-      </div>
+      </Box>
 
       {/* Coluna da direita */}
-      <div style={{ flex: 3, padding: "20px" }}>
+      <Box sx={{ flex: 3, padding: 2 }}>
         <svg ref={svgRef} width="100%" height="100%"></svg>
-      </div>
-    </div>
+      </Box>
+    </Container>
   );
 }
 

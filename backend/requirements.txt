@@ -6,3 +6,5 @@ PyMuPDF
 speechrecognition
 python-multipart
 python-dotenv
+anthropic>=0.5.0
+mistralai==0.4.2

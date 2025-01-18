@@ -8,6 +8,8 @@ services:
     container_name: backend_app
     environment:
       - GEMINI_KEY
+      - CLAUDEAI_KEY
+      - MISTRAL_KEY
       - OLLAMA_URL=http://ollama:11434
     ports:
       - "8000:8000"

@@ -9,6 +9,10 @@ import speech_recognition as sr
 from pydub import AudioSegment
 from io import BytesIO
 from dotenv import load_dotenv
+import anthropic
+import requests
+from mistralai.client import MistralClient
+from mistralai.models.chat_completion import ChatMessage
 
 load_dotenv()
 # Instância da aplicação FastAPI
@@ -27,15 +31,81 @@ app.add_middleware(
 # Env Variables
 ollama_url = os.getenv("OLLAMA_URL", "http://ollama:11434")
 gemini_api_key = os.getenv("GEMINI_KEY")
+claude_api_key = os.getenv("CLAUDEAI_KEY")
+mistral_api_key= os.getenv("MISTRAL_KEY")
 
 if not gemini_api_key:
     raise ValueError("Erro: A chave GEMINI_KEY não foi encontrada no ambiente ou no arquivo .env.")
+if not claude_api_key:
+    raise ValueError("Erro: A chave CLAUDE_API_KEY não foi encontrada no ambiente ou no arquivo .env.")
+if not mistral_api_key:
+    raise ValueError("Erro: A chave MISTRAL_KEY não foi encontrada no ambiente ou no arquivo .env.")
+
 
 genai.configure(api_key=gemini_api_key)
-ollama_url = os.getenv("OLLAMA_URL", "http://ollama:11434")
+claude_client = anthropic.Anthropic(api_key=claude_api_key)
+mistral_client = MistralClient(api_key=mistral_api_key)
+
+
 class MindmapResponse(BaseModel):
     model_response: str
     mindmap: dict
+
+def estimate_tokens(text: str) -> int:
+    """
+    Estimate the number of tokens in the text.
+    Using a conservative estimate of 1 token = 3 characters
+    """
+    return len(text) // 3
+    
+def chunk_text(text: str, max_chunk_size: int = 8000) -> list[str]:
+    """
+    Split text into smaller chunks, with a more conservative max size
+    """
+    # Rough sentence splitting
+    sentences = [s.strip() + '.' for s in text.replace('\n', ' ').split('.') if s.strip()]
+    chunks = []
+    current_chunk = []
+    current_size = 0
+    
+    for sentence in sentences:
+        sentence_tokens = estimate_tokens(sentence)
+        
+        if current_size + sentence_tokens > max_chunk_size:
+            if current_chunk:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = []
+                current_size = 0
+            
+            # If a single sentence is too long, split it into smaller pieces
+            if sentence_tokens > max_chunk_size:
+                words = sentence.split()
+                temp_chunk = []
+                temp_size = 0
+                
+                for word in words:
+                    word_tokens = estimate_tokens(word + ' ')
+                    if temp_size + word_tokens > max_chunk_size:
+                        if temp_chunk:
+                            chunks.append(' '.join(temp_chunk) + '...')
+                            temp_chunk = []
+                            temp_size = 0
+                    temp_chunk.append(word)
+                    temp_size += word_tokens
+                
+                if temp_chunk:
+                    chunks.append(' '.join(temp_chunk) + '...')
+            else:
+                current_chunk = [sentence]
+                current_size = sentence_tokens
+        else:
+            current_chunk.append(sentence)
+            current_size += sentence_tokens
+    
+    if current_chunk:
+        chunks.append(' '.join(current_chunk))
+    
+    return chunks
 
 def convert_audio_to_text(audio_file: bytes) -> str:
     recognizer = sr.Recognizer()
@@ -94,14 +164,114 @@ def generate_with_gemini(input_text: str) -> str:
     response = model.generate_content(input_text)
     return response.text
 
+'''
 def generate_with_ollama(input_text: str) -> str:
     response = requests.post(
         f"{ollama_url}/api/generate",
-        json={"prompt": input_text},
+        json={"prompt": input_text, "model": "mistral"}
     )
     if response.status_code != 200:
         raise ValueError(f"Erro ao se comunicar com o Ollama: {response.text}")
-    return response.json().get("content", "")
+    
+    try:
+        response_data = response.json()
+        return response_data.get("content", "")
+    except ValueError:
+        raise ValueError(f"Resposta inválida do Ollama: {response.text}")
+'''
+
+def generate_with_claude(input_text: str) -> str:
+    try:
+        message = claude_client.messages.create(
+            model="claude-3-sonnet-20240229",
+            max_tokens=1024,
+            messages=[{
+                "role": "user",
+                "content": f"""Create a mind map structure from the following text. 
+                Format the response as a hierarchical structure with main topics in bold (**Topic**) 
+                and subtopics with asterisks (*Subtopic*). Additional details should be regular text.
+                
+                Text to analyze: {input_text}"""
+            }]
+        )
+        return message.content[0].text
+    except Exception as e:
+        print(f"Error with Claude API: {e}")
+        raise
+
+def generate_with_mistral(input_text: str) -> str:
+    try:
+        # Split text into smaller chunks
+        chunks = chunk_text(input_text)
+        all_responses = []
+        
+        system_prompt = """Create a mind map structure from the following text. 
+        Format the output as a hierarchical structure with:
+        - Main topics marked with '**Topic**'
+        - Subtopics marked with '*Subtopic*'
+        - Additional details in regular text
+        Keep the response concise and focused on the main points."""
+
+        # Process each chunk
+        for i, chunk in enumerate(chunks):
+            # Estimate total tokens including prompts
+            total_tokens = estimate_tokens(system_prompt + chunk)
+            if total_tokens > 8000:  # If still too large, skip this chunk
+                print(f"Skipping chunk {i+1} due to size: {total_tokens} estimated tokens")
+                continue
+
+            if i == 0:
+                chunk_prompt = f"Extract the main topics and subtopics from this text: {chunk}"
+            else:
+                chunk_prompt = f"Continue extracting topics from this part: {chunk}"
+
+            messages = [
+                ChatMessage(role="system", content=system_prompt),
+                ChatMessage(role="user", content=chunk_prompt)
+            ]
+
+            try:
+                chat_response = mistral_client.chat(
+                    model="mistral-small",  # Using smaller model for better token handling
+                    messages=messages
+                )
+                
+                response_text = chat_response.choices[0].message.content
+                all_responses.append(response_text)
+            except Exception as e:
+                print(f"Error processing chunk {i+1}: {e}")
+                continue
+        
+        # Combine responses and remove duplicates
+        combined_response = "\n".join(all_responses)
+        
+        # Clean up and deduplicate topics
+        seen_topics = set()
+        final_lines = []
+        
+        for line in combined_response.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+                
+            # For main topics (marked with **)
+            if line.startswith('**') and line.endswith('**'):
+                if line not in seen_topics:
+                    seen_topics.add(line)
+                    final_lines.append(line)
+            else:
+                # For subtopics and details
+                if line not in seen_topics:
+                    seen_topics.add(line)
+                    final_lines.append(line)
+        
+        return '\n'.join(final_lines)
+        
+    except Exception as e:
+        print(f"Error with Mistral AI: {e}")
+        raise
+
+
 
 @app.post("/process-file")
 async def process_file(
@@ -122,11 +292,17 @@ async def process_file(
             audio_text = convert_audio_to_text(audio_bytes)
 
         input_text = (prompt or "") + "\n" + pdf_text + "\n" + audio_text
+        input_text = input_text.strip()
+
 
         if model == "gemini":
             response_text = generate_with_gemini(input_text)
         elif model == "ollama":
             response_text = generate_with_ollama(input_text)
+        elif model == "claude":
+            response_text = generate_with_claude(input_text)
+        elif model == "mistral":
+            response_text = generate_with_mistral(input_text)
         else:
             raise ValueError("Modelo desconhecido. Escolha entre 'gemini' ou 'ollama'.")
 
