@@ -79,6 +79,7 @@ function App() {
               {/*<MenuItem value="ollama">Ollama</MenuItem>*/}
               <MenuItem value="claude">ClaudeAI</MenuItem>
               <MenuItem value="mistral">Mistral</MenuItem>
+              <MenuItem value="langchain">langchain</MenuItem>
             </Select>
           </FormControl>
           <Button variant="contained" component="label">

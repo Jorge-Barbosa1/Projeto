@@ -13,6 +13,9 @@ import anthropic
 import requests
 from mistralai.client import MistralClient
 from mistralai.models.chat_completion import ChatMessage
+from langchain_openai import OpenAI
+from langchain.prompts import PromptTemplate  # Nova importação
+from langchain.chains import LLMChain 
 
 load_dotenv()
 # Instância da aplicação FastAPI
@@ -33,6 +36,8 @@ ollama_url = os.getenv("OLLAMA_URL", "http://ollama:11434")
 gemini_api_key = os.getenv("GEMINI_KEY")
 claude_api_key = os.getenv("CLAUDEAI_KEY")
 mistral_api_key= os.getenv("MISTRAL_KEY")
+openai_key = os.getenv("OPENAI_KEY")
+
 
 if not gemini_api_key:
     raise ValueError("Erro: A chave GEMINI_KEY não foi encontrada no ambiente ou no arquivo .env.")
@@ -41,11 +46,10 @@ if not claude_api_key:
 if not mistral_api_key:
     raise ValueError("Erro: A chave MISTRAL_KEY não foi encontrada no ambiente ou no arquivo .env.")
 
-
 genai.configure(api_key=gemini_api_key)
 claude_client = anthropic.Anthropic(api_key=claude_api_key)
 mistral_client = MistralClient(api_key=mistral_api_key)
-
+llm = OpenAI(model="gpt-3.5-turbo-instruct", temperature=0.7, openai_api_key=openai_key)
 
 class MindmapResponse(BaseModel):
     model_response: str
@@ -57,7 +61,7 @@ def estimate_tokens(text: str) -> int:
     Using a conservative estimate of 1 token = 3 characters
     """
     return len(text) // 3
-    
+
 def chunk_text(text: str, max_chunk_size: int = 8000) -> list[str]:
     """
     Split text into smaller chunks, with a more conservative max size
@@ -130,9 +134,6 @@ def convert_audio_to_text(audio_file: bytes) -> str:
         raise
 
 def generate_mindmap_structure(text: str) -> str:
-    """
-    Converte o texto em Markdown para estrutura do mapa mental com mais hierarquias.
-    """
     lines = text.strip().split("\n")
     markdown = "# Tópico Principal\n"
     for line in lines:
@@ -146,9 +147,7 @@ def generate_mindmap_structure(text: str) -> str:
 
 
 def extract_text_from_pdf(pdf_file: bytes) -> str:
-    """
-    Função para extrair texto de PDF usando PyMuPDF.
-    """
+  
     text = ""
     try:
         with fitz.open(stream=pdf_file, filetype="pdf") as pdf:
@@ -205,12 +204,13 @@ def generate_with_mistral(input_text: str) -> str:
         chunks = chunk_text(input_text)
         all_responses = []
         
-        system_prompt = """Create a mind map structure from the following text. 
-        Format the output as a hierarchical structure with:
-        - Main topics marked with '**Topic**'
-        - Subtopics marked with '*Subtopic*'
-        - Additional details in regular text
-        Keep the response concise and focused on the main points."""
+        system_prompt = """Crie uma estrutura de mapa mental a partir do seguinte texto.
+            Formate a saída como uma estrutura hierárquica com:
+                -Tópicos principais marcados com 'Tópico'
+                -Subtópicos marcados com 'Subtópico'
+                -Detalhes adicionais em texto regular
+            Mantem a resposta concisa e focada nos pontos principais
+            """
 
         # Process each chunk
         for i, chunk in enumerate(chunks):
@@ -271,6 +271,19 @@ def generate_with_mistral(input_text: str) -> str:
         print(f"Error with Mistral AI: {e}")
         raise
 
+def generate_with_langchain(input_text: str) -> str:
+    prompt = PromptTemplate(
+        input_variables=["topic"],
+        template="""Crie uma estrutura de mapa mental a partir do seguinte texto.
+            Formate a saída como uma estrutura hierárquica com:
+                -Tópicos principais marcados com 'Tópico'
+                -Subtópicos marcados com 'Subtópico'
+                -Detalhes adicionais em texto regular
+            Mantem a resposta concisa e focada nos pontos principais{topic}
+            """
+    )
+    chain = LLMChain(llm=llm, prompt=prompt)
+    return chain.run(topic=input_text)
 
 
 @app.post("/process-file")
@@ -303,6 +316,8 @@ async def process_file(
             response_text = generate_with_claude(input_text)
         elif model == "mistral":
             response_text = generate_with_mistral(input_text)
+        elif model == "langchain":
+            response_text = generate_with_langchain(input_text)
         else:
             raise ValueError("Modelo desconhecido. Escolha entre 'gemini' ou 'ollama'.")
 

@@ -7,6 +7,7 @@ services:
       dockerfile: Dockerfile
     container_name: backend_app
     environment:
+      - OPENAI_KEY
       - GEMINI_KEY
       - CLAUDEAI_KEY
       - MISTRAL_KEY
