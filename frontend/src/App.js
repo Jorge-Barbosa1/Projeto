@@ -131,7 +131,7 @@ function App() {
               <MenuItem value="gemini">Gemini</MenuItem>
               <MenuItem value="claude">ClaudeAI</MenuItem>
               <MenuItem value="mistral">Mistral</MenuItem>
-              <MenuItem value="ollama">Ollama</MenuItem>
+              {/*<MenuItem value="ollama">Ollama</MenuItem>*/}
             </Select>
           </FormControl>
           <Button variant="contained" component="label">

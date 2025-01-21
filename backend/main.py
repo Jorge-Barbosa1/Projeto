@@ -14,6 +14,7 @@ import requests
 from mistralai.client import MistralClient
 from mistralai.models.chat_completion import ChatMessage
 import base64
+import time 
 
 load_dotenv()
 # Instância da aplicação FastAPI
@@ -22,11 +23,11 @@ app = FastAPI()
 # Configuração de CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permitir todas as origens
+    allow_origins=["http://localhost:3000"],  # Adicione o frontend aqui
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["Access-Control-Allow-Origin"],  # Exponha o header necessário
+    expose_headers=["Access-Control-Allow-Origin"],
 )
 
 # Env Variables
@@ -159,10 +160,11 @@ def generate_with_gemini(input_text: str) -> str:
     response = model.generate_content(input_text)
     return response.text
 
+'''
 def generate_with_ollama(input_text: str) -> str:
     try:
-        model_name = "llama2"  # Changed from llama3 to llama2 as it's more commonly available
-        chunks = chunk_text(input_text, max_chunk_size=2000)
+        model_name = "phi"
+        chunks = chunk_text(input_text, max_chunk_size=1000)
         all_responses = []
 
         for i, chunk in enumerate(chunks):
@@ -179,7 +181,7 @@ def generate_with_ollama(input_text: str) -> str:
                             "prompt": chunk,
                             "stream": False  # Disable streaming for simplicity
                         },
-                        timeout=30  # Add timeout
+                        timeout=120  # Add timeout
                     )
                     response.raise_for_status()
                     break
@@ -196,6 +198,7 @@ def generate_with_ollama(input_text: str) -> str:
     except requests.RequestException as e:
         print(f"Ollama connection error: {e}")
         raise ValueError(f"Erro ao conectar ao Ollama: {e}")
+'''
 
 def generate_with_claude(input_text: str) -> str:
     try:
@@ -322,9 +325,9 @@ async def process_file(
         if model == "gemini":
             response_text = generate_with_gemini(input_text)
             summary = generate_with_gemini(summary_prompt)
-        elif model == "ollama":
+        '''elif model == "ollama":
             response_text = generate_with_ollama(input_text)
-            summary = generate_with_ollama(summary_prompt)
+            summary = generate_with_ollama(summary_prompt)'''
         elif model == "claude":
             response_text = generate_with_claude(input_text)
             summary = generate_with_claude(summary_prompt)
