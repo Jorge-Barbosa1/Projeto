@@ -33,6 +33,14 @@ services:
       - ollama:/root/.ollama
     ports:
       - "11434:11434"
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+    environment:
+      - OLLAMA_HOST=0.0.0.0
 
 volumes:
   ollama:

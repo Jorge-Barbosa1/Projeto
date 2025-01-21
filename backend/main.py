@@ -13,9 +13,7 @@ import anthropic
 import requests
 from mistralai.client import MistralClient
 from mistralai.models.chat_completion import ChatMessage
-from langchain_openai import OpenAI
-from langchain.prompts import PromptTemplate  # Nova importação
-from langchain.chains import LLMChain 
+import base64
 
 load_dotenv()
 # Instância da aplicação FastAPI
@@ -36,7 +34,6 @@ ollama_url = os.getenv("OLLAMA_URL", "http://ollama:11434")
 gemini_api_key = os.getenv("GEMINI_KEY")
 claude_api_key = os.getenv("CLAUDEAI_KEY")
 mistral_api_key= os.getenv("MISTRAL_KEY")
-openai_key = os.getenv("OPENAI_KEY")
 
 
 if not gemini_api_key:
@@ -49,7 +46,6 @@ if not mistral_api_key:
 genai.configure(api_key=gemini_api_key)
 claude_client = anthropic.Anthropic(api_key=claude_api_key)
 mistral_client = MistralClient(api_key=mistral_api_key)
-llm = OpenAI(model="gpt-3.5-turbo-instruct", temperature=0.7, openai_api_key=openai_key)
 
 class MindmapResponse(BaseModel):
     model_response: str
@@ -163,21 +159,43 @@ def generate_with_gemini(input_text: str) -> str:
     response = model.generate_content(input_text)
     return response.text
 
-'''
 def generate_with_ollama(input_text: str) -> str:
-    response = requests.post(
-        f"{ollama_url}/api/generate",
-        json={"prompt": input_text, "model": "mistral"}
-    )
-    if response.status_code != 200:
-        raise ValueError(f"Erro ao se comunicar com o Ollama: {response.text}")
-    
     try:
-        response_data = response.json()
-        return response_data.get("content", "")
-    except ValueError:
-        raise ValueError(f"Resposta inválida do Ollama: {response.text}")
-'''
+        model_name = "llama2"  # Changed from llama3 to llama2 as it's more commonly available
+        chunks = chunk_text(input_text, max_chunk_size=2000)
+        all_responses = []
+
+        for i, chunk in enumerate(chunks):
+            print(f"Processando chunk {i+1} de {len(chunks)}...")
+            
+            # Add timeout and retry logic
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(
+                        f"{ollama_url}/api/generate",
+                        json={
+                            "model": model_name,
+                            "prompt": chunk,
+                            "stream": False  # Disable streaming for simplicity
+                        },
+                        timeout=30  # Add timeout
+                    )
+                    response.raise_for_status()
+                    break
+                except requests.RequestException as e:
+                    if attempt == max_retries - 1:
+                        raise
+                    print(f"Retry attempt {attempt + 1} after error: {e}")
+                    time.sleep(1)  # Wait before retrying
+
+            response_json = response.json()
+            all_responses.append(response_json.get("response", ""))
+
+        return "\n".join(all_responses)
+    except requests.RequestException as e:
+        print(f"Ollama connection error: {e}")
+        raise ValueError(f"Erro ao conectar ao Ollama: {e}")
 
 def generate_with_claude(input_text: str) -> str:
     try:
@@ -271,20 +289,10 @@ def generate_with_mistral(input_text: str) -> str:
         print(f"Error with Mistral AI: {e}")
         raise
 
-def generate_with_langchain(input_text: str) -> str:
-    prompt = PromptTemplate(
-        input_variables=["topic"],
-        template="""Crie uma estrutura de mapa mental a partir do seguinte texto.
-            Formate a saída como uma estrutura hierárquica com:
-                -Tópicos principais marcados com 'Tópico'
-                -Subtópicos marcados com 'Subtópico'
-                -Detalhes adicionais em texto regular
-            Mantem a resposta concisa e focada nos pontos principais{topic}
-            """
-    )
-    chain = LLMChain(llm=llm, prompt=prompt)
-    return chain.run(topic=input_text)
-
+class ProcessResponse(BaseModel):
+    markdown: str
+    original_text: str
+    model_summary: str
 
 @app.post("/process-file")
 async def process_file(
@@ -306,24 +314,33 @@ async def process_file(
 
         input_text = (prompt or "") + "\n" + pdf_text + "\n" + audio_text
         input_text = input_text.strip()
-
-
+        
+        summary_prompt = (
+            "Cria um resumo em tópicos do seguinte texto, usando:\n- Tópicos principais\n- Subtópicos\n- Pontos-chave\n\nTexto:"
+        ) + f"\n\n{input_text}"
+        
         if model == "gemini":
             response_text = generate_with_gemini(input_text)
+            summary = generate_with_gemini(summary_prompt)
         elif model == "ollama":
             response_text = generate_with_ollama(input_text)
+            summary = generate_with_ollama(summary_prompt)
         elif model == "claude":
             response_text = generate_with_claude(input_text)
+            summary = generate_with_claude(summary_prompt)
         elif model == "mistral":
             response_text = generate_with_mistral(input_text)
-        elif model == "langchain":
-            response_text = generate_with_langchain(input_text)
+            summary = generate_with_mistral(summary_prompt)
         else:
-            raise ValueError("Modelo desconhecido. Escolha entre 'gemini' ou 'ollama'.")
+            raise ValueError("Modelo desconhecido. Escolha entre 'gemini', 'ollama', 'claude' ou 'mistral'.")
 
         markdown = generate_mindmap_structure(response_text)
-        print(markdown)
-        return {"markdown": markdown}
+        
+        return ProcessResponse(
+            markdown=markdown,
+            original_text=pdf_text,
+            model_summary=summary
+        )
     except Exception as e:
         print(f"Erro no backend: {e}")
         raise
