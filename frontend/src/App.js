@@ -42,25 +42,29 @@ function App() {
   const [pdfContent, setPdfContent] = useState("");
   const [modelSummary, setModelSummary] = useState("");
   const svgRef = useRef(null);
-  const markmapRef = useRef(null);
+
+  const renderMarkmap = () => {
+    if (markdown && svgRef.current) {
+      svgRef.current.innerHTML = ""; // Limpar o SVG anterior
+
+      try {
+        const transformer = new Transformer();
+        const { root } = transformer.transform(markdown);
+        const mm = Markmap.create(svgRef.current, {}, root);
+        mm.fit(); // Ajustar o gráfico ao contêiner
+      } catch (error) {
+        console.error("Erro ao criar o Markmap:", error);
+      }
+    }
+  };
 
   useEffect(() => {
-    if (markdown && svgRef.current) {
-      // Limpar o SVG anterior
-      svgRef.current.innerHTML = '';
-      
-      // Criar novo markmap
-      const transformer = new Transformer();
-      const { root } = transformer.transform(markdown);
-      const mm = Markmap.create(svgRef.current, {}, root);
-      markmapRef.current = mm;
-    }
+    renderMarkmap();
   }, [markdown]);
 
-  // Atualizar o markmap quando trocar de tab
   useEffect(() => {
-    if (tabValue === 0 && markmapRef.current) {
-      markmapRef.current.fit();
+    if (tabValue === 0) {
+      renderMarkmap();
     }
   }, [tabValue]);
 
@@ -78,7 +82,10 @@ function App() {
     if (audioFile) formData.append("audio_file", audioFile);
 
     try {
-      const response = await axios.post("http://localhost:8000/process-file", formData);
+      const response = await axios.post(
+        "http://localhost:8000/process-file",
+        formData
+      );
       setMarkdown(response.data.markdown);
       setPdfContent(response.data.original_text);
       setModelSummary(response.data.model_summary);
@@ -89,7 +96,10 @@ function App() {
   };
 
   return (
-    <Container maxWidth="lg" sx={{ display: "flex", height: "100vh", padding: 2 }}>
+    <Container
+      maxWidth="lg"
+      sx={{ display: "flex", height: "100vh", padding: 2 }}
+    >
       {/* Left Column */}
       <Box
         sx={{
@@ -104,7 +114,10 @@ function App() {
         <Typography variant="h4" gutterBottom>
           Gerador de Mapa Mental
         </Typography>
-        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <form
+          onSubmit={handleSubmit}
+          style={{ display: "flex", flexDirection: "column", gap: 16 }}
+        >
           <TextField
             label="Digite o prompt"
             variant="outlined"
@@ -146,13 +159,13 @@ function App() {
       </Box>
 
       {/* Right Column */}
-      <Box sx={{ flex: 3, padding: 2, display: 'flex', flexDirection: 'column' }}>
-        <Paper sx={{ width: '100%', bgcolor: 'background.paper' }}>
+      <Box sx={{ flex: 3, padding: 2, display: "flex", flexDirection: "column" }}>
+        <Paper sx={{ width: "100%", bgcolor: "background.paper" }}>
           <Tabs
             value={tabValue}
             onChange={handleTabChange}
             centered
-            sx={{ borderBottom: 1, borderColor: 'divider' }}
+            sx={{ borderBottom: 1, borderColor: "divider" }}
           >
             <Tab label="Mapa Mental" />
             <Tab label="Conteúdo PDF" />
@@ -161,18 +174,24 @@ function App() {
         </Paper>
 
         <TabPanel value={tabValue} index={0}>
-          <div style={{ width: "100%", height: "calc(100vh - 200px)", overflow: "hidden" }}>
+          <div
+            style={{
+              width: "100%",
+              height: "calc(100vh - 200px)",
+              overflow: "hidden",
+            }}
+          >
             <svg ref={svgRef} style={{ width: "100%", height: "100%" }}></svg>
           </div>
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
-          <Paper 
-            sx={{ 
-              p: 2, 
-              maxHeight: "calc(100vh - 200px)", 
+          <Paper
+            sx={{
+              p: 2,
+              maxHeight: "calc(100vh - 200px)",
               overflow: "auto",
-              whiteSpace: "pre-wrap"
+              whiteSpace: "pre-wrap",
             }}
           >
             {pdfContent}
@@ -180,11 +199,11 @@ function App() {
         </TabPanel>
 
         <TabPanel value={tabValue} index={2}>
-          <Paper 
-            sx={{ 
-              p: 2, 
-              maxHeight: "calc(100vh - 200px)", 
-              overflow: "auto" 
+          <Paper
+            sx={{
+              p: 2,
+              maxHeight: "calc(100vh - 200px)",
+              overflow: "auto",
             }}
           >
             <div style={{ whiteSpace: "pre-wrap" }}>{modelSummary}</div>
