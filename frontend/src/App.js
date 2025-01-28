@@ -2,8 +2,16 @@ import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { Transformer } from "markmap-lib";
 import { Markmap } from "markmap-view";
-import { Worker, Viewer } from '@react-pdf-viewer/core';
-import '@react-pdf-viewer/core/lib/styles/index.css';
+import { Worker, Viewer } from "@react-pdf-viewer/core";
+import "@react-pdf-viewer/core/lib/styles/index.css";
+import { toolbarPlugin } from "@react-pdf-viewer/toolbar";
+import "@react-pdf-viewer/toolbar/lib/styles/index.css";
+import { thumbnailPlugin } from "@react-pdf-viewer/thumbnail";
+import "@react-pdf-viewer/thumbnail/lib/styles/index.css";
+import { searchPlugin } from "@react-pdf-viewer/search";
+import "@react-pdf-viewer/search/lib/styles/index.css";
+import { zoomPlugin } from "@react-pdf-viewer/zoom";
+import "@react-pdf-viewer/zoom/lib/styles/index.css";
 import {
   Container,
   Box,
@@ -19,6 +27,50 @@ import {
   Paper,
 } from "@mui/material";
 import "./App.css";
+
+function PDFViewer({ pdfUrl }) {
+  const toolbarPluginInstance = toolbarPlugin();
+  const { Toolbar } = toolbarPluginInstance; // Corrige erro de undefined
+
+  const thumbnailPluginInstance = thumbnailPlugin();
+  const { Thumbnails } = thumbnailPluginInstance; // Corrige erro no painel de miniaturas
+
+  const searchPluginInstance = searchPlugin();
+  const zoomPluginInstance = zoomPlugin();
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* Barra de ferramentas */}
+      <div style={{ borderBottom: "1px solid #ddd", padding: "8px" }}>
+        <Toolbar />
+      </div>
+
+      {/* Layout com miniaturas e visualizador */}
+      <div style={{ display: "flex", flex: 1 }}>
+        {/* Painel de miniaturas */}
+        <div style={{ width: "20%", borderRight: "1px solid #ddd", padding: "8px" }}>
+          <Thumbnails />
+        </div>
+
+        {/* Visualizador principal */}
+        <div style={{ flex: 1, overflow: "hidden" }}>
+          <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
+            <Viewer
+              fileUrl={pdfUrl}
+              plugins={[
+                toolbarPluginInstance,
+                thumbnailPluginInstance,
+                searchPluginInstance,
+                zoomPluginInstance,
+              ]}
+            />
+          </Worker>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -198,9 +250,7 @@ function App() {
         <TabPanel value={tabValue} index={1}>
           <div style={{ height: "calc(100vh - 200px)" }}>
             {pdfUrl ? (
-              <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
-                <Viewer fileUrl={pdfUrl} />
-              </Worker>
+              <PDFViewer pdfUrl={pdfUrl} />
             ) : (
               <Typography variant="body1" align="center">
                 Selecione um arquivo PDF para visualizar
@@ -208,7 +258,7 @@ function App() {
             )}
           </div>
         </TabPanel>
-
+        
         <TabPanel value={tabValue} index={2}>
           <Paper
             sx={{
