@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import { Transformer } from "markmap-lib";
 import { Markmap } from "markmap-view";
+import { Worker, Viewer } from '@react-pdf-viewer/core';
+import '@react-pdf-viewer/core/lib/styles/index.css';
 import {
   Container,
   Box,
@@ -36,6 +38,7 @@ function App() {
   const [markdown, setMarkdown] = useState("");
   const [prompt, setPrompt] = useState("");
   const [pdfFile, setPdfFile] = useState(null);
+  const [pdfUrl, setPdfUrl] = useState(null);
   const [audioFile, setAudioFile] = useState(null);
   const [model, setModel] = useState("gemini");
   const [tabValue, setTabValue] = useState(0);
@@ -45,13 +48,12 @@ function App() {
 
   const renderMarkmap = () => {
     if (markdown && svgRef.current) {
-      svgRef.current.innerHTML = ""; // Limpar o SVG anterior
-
+      svgRef.current.innerHTML = "";
       try {
         const transformer = new Transformer();
         const { root } = transformer.transform(markdown);
         const mm = Markmap.create(svgRef.current, {}, root);
-        mm.fit(); // Ajustar o gráfico ao contêiner
+        mm.fit();
       } catch (error) {
         console.error("Erro ao criar o Markmap:", error);
       }
@@ -67,6 +69,15 @@ function App() {
       renderMarkmap();
     }
   }, [tabValue]);
+
+  useEffect(() => {
+    // Criar URL para o PDF quando um arquivo for selecionado
+    if (pdfFile) {
+      const fileUrl = URL.createObjectURL(pdfFile);
+      setPdfUrl(fileUrl);
+      return () => URL.revokeObjectURL(fileUrl);
+    }
+  }, [pdfFile]);
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -89,7 +100,7 @@ function App() {
       setMarkdown(response.data.markdown);
       setPdfContent(response.data.original_text);
       setModelSummary(response.data.model_summary);
-      setTabValue(0); // Volta para a primeira tab após gerar
+      setTabValue(0);
     } catch (error) {
       console.error("Erro ao gerar mapa mental:", error);
     }
@@ -131,7 +142,6 @@ function App() {
               <MenuItem value="gemini">Gemini</MenuItem>
               <MenuItem value="claude">ClaudeAI</MenuItem>
               <MenuItem value="mistral">Mistral</MenuItem>
-              {/*<MenuItem value="ollama">Ollama</MenuItem>*/}
             </Select>
           </FormControl>
           <Button variant="contained" component="label">
@@ -168,7 +178,7 @@ function App() {
             sx={{ borderBottom: 1, borderColor: "divider" }}
           >
             <Tab label="Mapa Mental" />
-            <Tab label="Conteúdo PDF" />
+            <Tab label="Visualizador PDF" />
             <Tab label="Resumo do Modelo" />
           </Tabs>
         </Paper>
@@ -186,16 +196,17 @@ function App() {
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
-          <Paper
-            sx={{
-              p: 2,
-              maxHeight: "calc(100vh - 200px)",
-              overflow: "auto",
-              whiteSpace: "pre-wrap",
-            }}
-          >
-            {pdfContent}
-          </Paper>
+          <div style={{ height: "calc(100vh - 200px)" }}>
+            {pdfUrl ? (
+              <Worker workerUrl="https://unpkg.com/pdfjs-dist@3.4.120/build/pdf.worker.min.js">
+                <Viewer fileUrl={pdfUrl} />
+              </Worker>
+            ) : (
+              <Typography variant="body1" align="center">
+                Selecione um arquivo PDF para visualizar
+              </Typography>
+            )}
+          </div>
         </TabPanel>
 
         <TabPanel value={tabValue} index={2}>

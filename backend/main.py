@@ -31,7 +31,6 @@ app.add_middleware(
 )
 
 # Env Variables
-ollama_url = os.getenv("OLLAMA_URL", "http://ollama:11434")
 gemini_api_key = os.getenv("GEMINI_KEY")
 claude_api_key = os.getenv("CLAUDEAI_KEY")
 mistral_api_key= os.getenv("MISTRAL_KEY")
@@ -203,7 +202,7 @@ def generate_with_ollama(input_text: str) -> str:
 def generate_with_claude(input_text: str) -> str:
     try:
         message = claude_client.messages.create(
-            model="claude-3-sonnet-20240229",
+            model="claude-3-5-sonnet-20241022",
             max_tokens=1024,
             messages=[{
                 "role": "user",
@@ -325,9 +324,6 @@ async def process_file(
         if model == "gemini":
             response_text = generate_with_gemini(input_text)
             summary = generate_with_gemini(summary_prompt)
-        '''elif model == "ollama":
-            response_text = generate_with_ollama(input_text)
-            summary = generate_with_ollama(summary_prompt)'''
         elif model == "claude":
             response_text = generate_with_claude(input_text)
             summary = generate_with_claude(summary_prompt)
@@ -335,7 +331,7 @@ async def process_file(
             response_text = generate_with_mistral(input_text)
             summary = generate_with_mistral(summary_prompt)
         else:
-            raise ValueError("Modelo desconhecido. Escolha entre 'gemini', 'ollama', 'claude' ou 'mistral'.")
+            raise ValueError("Modelo desconhecido. Escolha entre 'gemini', 'claude' ou 'mistral'.")
 
         markdown = generate_mindmap_structure(response_text)
         
