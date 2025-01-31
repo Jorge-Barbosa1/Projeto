@@ -12,6 +12,7 @@ import { searchPlugin } from "@react-pdf-viewer/search";
 import "@react-pdf-viewer/search/lib/styles/index.css";
 import { zoomPlugin } from "@react-pdf-viewer/zoom";
 import "@react-pdf-viewer/zoom/lib/styles/index.css";
+import { ArrowForward } from "@mui/icons-material";
 import {
   TextField,
   Button,
@@ -19,6 +20,7 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  IconButton,
 } from "@mui/material";
 
 function PDFViewer({ pdfUrl }) {
@@ -65,6 +67,7 @@ function App() {
   const [model, setModel] = useState("gemini");
   const [activeTab, setActiveTab] = useState("pdf"); // pdf, mindmap, summary
   const [modelSummary, setModelSummary] = useState("");
+
   const svgRef = useRef(null);
 
   useEffect(() => {
@@ -111,7 +114,6 @@ function App() {
       display: 'flex',
       flexDirection: 'column',
       height: '100vh',
-      backgroundColor: '#ffffff',
       overflow: 'hidden',
       position: 'relative'
     }}>
@@ -183,6 +185,7 @@ function App() {
 
         {/* Right Panel */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+
           {/* Tabs */}
           <div style={{
             display: 'flex',
@@ -273,13 +276,9 @@ function App() {
           onChange={(e) => setPrompt(e.target.value)}
           style={{ flex: 1 }}
         />
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={handleSubmit}
-        >
-          Gerar Mapa Mental
-        </Button>
+        <IconButton color="primary" onClick={handleSubmit}>
+          <ArrowForward />
+        </IconButton>
       </div>
     </div>
   );
