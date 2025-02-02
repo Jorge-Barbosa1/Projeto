@@ -16,6 +16,8 @@ services:
       - "8000:8000"
     env_file:
       - .env
+    depends_on:
+      - ollama
 
   frontend:
     build:
@@ -29,20 +31,12 @@ services:
   
   ollama:
     image: ollama/ollama:latest
-    volumes:
-      - ollama:/root/.ollama
+    container_name: ollama
     ports:
       - "11434:11434"
-    deploy:
-      resources:
-        limits:
-          memory: 10G
-          cpus: "2.0"
-        reservations:
-          memory: 6G
-          cpus: "1.0" 
-    environment:
-      - OLLAMA_HOST=0.0.0.0
+    volumes:
+      - ollama:/root/.ollama
 
 volumes:
   ollama:
+

@@ -15,6 +15,8 @@ from mistralai.client import MistralClient
 from mistralai.models.chat_completion import ChatMessage
 import base64
 import time 
+import json
+import requests
 
 load_dotenv()
 # Instância da aplicação FastAPI
@@ -159,46 +161,6 @@ def generate_with_gemini(input_text: str) -> str:
     response = model.generate_content(input_text)
     return response.text
 
-'''
-def generate_with_ollama(input_text: str) -> str:
-    try:
-        model_name = "phi"
-        chunks = chunk_text(input_text, max_chunk_size=1000)
-        all_responses = []
-
-        for i, chunk in enumerate(chunks):
-            print(f"Processando chunk {i+1} de {len(chunks)}...")
-            
-            # Add timeout and retry logic
-            max_retries = 3
-            for attempt in range(max_retries):
-                try:
-                    response = requests.post(
-                        f"{ollama_url}/api/generate",
-                        json={
-                            "model": model_name,
-                            "prompt": chunk,
-                            "stream": False  # Disable streaming for simplicity
-                        },
-                        timeout=120  # Add timeout
-                    )
-                    response.raise_for_status()
-                    break
-                except requests.RequestException as e:
-                    if attempt == max_retries - 1:
-                        raise
-                    print(f"Retry attempt {attempt + 1} after error: {e}")
-                    time.sleep(1)  # Wait before retrying
-
-            response_json = response.json()
-            all_responses.append(response_json.get("response", ""))
-
-        return "\n".join(all_responses)
-    except requests.RequestException as e:
-        print(f"Ollama connection error: {e}")
-        raise ValueError(f"Erro ao conectar ao Ollama: {e}")
-'''
-
 def generate_with_claude(input_text: str) -> str:
     try:
         message = claude_client.messages.create(
@@ -291,6 +253,96 @@ def generate_with_mistral(input_text: str) -> str:
         print(f"Error with Mistral AI: {e}")
         raise
 
+def generate_with_ollama(input_text: str, model_name: str = "tinyllama") -> str:
+    """
+    Generate text using Ollama API with chunk processing
+    """
+    try:
+        ollama_url = os.getenv("OLLAMA_URL", "http://ollama:11434")
+        
+        # Split text into chunks using the existing function
+        chunks = chunk_text(input_text)
+        all_responses = []
+        
+        system_prompt = """Create a mind map structure from the following text.
+                Dont do introductions, be concise and focused on the main points.
+                Format the response as a hierarchical structure with main topics in bold (**Topic**) 
+                and subtopics with asterisks (*Subtopic*). Additional details should be regular text."""
+        
+        # Process each chunk
+        for i, chunk in enumerate(chunks):
+            if i == 0:
+                chunk_prompt = f"{system_prompt}\nAnalyze this text and extract main topics:\n{chunk}"
+            else:
+                chunk_prompt = f"{system_prompt}\nContinue analyzing this part of the text:\n{chunk}"
+            
+            response = requests.post(
+                f"{ollama_url}/api/generate",
+                json={
+                    "model": model_name,
+                    "prompt": chunk_prompt,
+                    "stream": False,
+                    "options": {
+                        "temperature": 0.2,
+                        "top_p": 0.95,
+                        "num_predict": 512
+                    }
+                },
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                result = response.json().get("response", "")
+                if result and not result.isspace():
+                    all_responses.append(result)
+            else:
+                print(f"Error processing chunk {i+1}: {response.text}")
+                continue
+        
+        # Combine and clean responses
+        combined_response = "\n".join(all_responses)
+        
+        # Clean up and deduplicate topics
+        seen_topics = set()
+        final_lines = []
+        
+        for line in combined_response.split('\n'):
+            line = line.strip()
+            if not line:
+                continue
+                
+            # Format and clean the line
+            if line.startswith('-') or line.startswith('•'):
+                line = line[1:].strip()
+                
+            # Process main topics (marked with **)
+            if line.startswith('**') and line.endswith('**'):
+                if line not in seen_topics:
+                    seen_topics.add(line)
+                    final_lines.append(line)
+            else:
+                # Process subtopics and details
+                if not line.startswith('*'):
+                    if ':' in line or line.isupper():
+                        line = f"**{line}**"
+                    else:
+                        line = f"*{line}*"
+                
+                if line not in seen_topics:
+                    seen_topics.add(line)
+                    final_lines.append(line)
+        
+        final_response = '\n'.join(final_lines)
+        
+        if not final_response.strip():
+            raise ValueError("No valid response generated from any chunk")
+            
+        return final_response
+        
+    except Exception as e:
+        print(f"Error in generate_with_ollama: {str(e)}")
+        raise
+
 class ProcessResponse(BaseModel):
     markdown: str
     original_text: str
@@ -302,6 +354,7 @@ async def process_file(
     pdf_file: UploadFile = File(None),
     audio_file: UploadFile = File(None),
     model: str = Form("gemini"),
+    ollama_model: str = Form("tinyllama")
 ):
     try:
         pdf_text = ""
@@ -330,6 +383,9 @@ async def process_file(
         elif model == "mistral":
             response_text = generate_with_mistral(input_text)
             summary = generate_with_mistral(summary_prompt)
+        elif model == "ollama":
+            response_text = generate_with_ollama(input_text, ollama_model)
+            summary = generate_with_ollama(summary_prompt, ollama_model)
         else:
             raise ValueError("Modelo desconhecido. Escolha entre 'gemini', 'claude' ou 'mistral'.")
 
