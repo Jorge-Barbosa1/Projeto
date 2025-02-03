@@ -254,95 +254,55 @@ def generate_with_mistral(input_text: str) -> str:
         raise
 
 def generate_with_ollama(input_text: str, model_name: str = "tinyllama") -> str:
-    """
-    Generate text using Ollama API with chunk processing
-    """
     try:
         ollama_url = os.getenv("OLLAMA_URL", "http://ollama:11434")
         
-        # Split text into chunks using the existing function
-        chunks = chunk_text(input_text)
+        # Precise token estimation
+        chunks = chunk_text(input_text, max_chunk_size=4000)
         all_responses = []
         
-        system_prompt = """Create a mind map structure from the following text.
-                Dont do introductions, be concise and focused on the main points.
-                Format the response as a hierarchical structure with main topics in bold (**Topic**) 
-                and subtopics with asterisks (*Subtopic*). Additional details should be regular text."""
+        system_prompt = """Crie uma estrutura de mapa mental concisa a partir do seguinte texto.
+        Formato:
+        - Tópicos principais em **Negrito**
+        - Subtópicos em *Itálico* 
+        - Foque nos pontos-chave"""
         
-        # Process each chunk
         for i, chunk in enumerate(chunks):
-            if i == 0:
-                chunk_prompt = f"{system_prompt}\nAnalyze this text and extract main topics:\n{chunk}"
-            else:
-                chunk_prompt = f"{system_prompt}\nContinue analyzing this part of the text:\n{chunk}"
+            prompt = f"{system_prompt}\n{'Análise inicial de' if i == 0 else 'Continuar analisando'} este texto:\n{chunk}"
             
             response = requests.post(
                 f"{ollama_url}/api/generate",
                 json={
                     "model": model_name,
-                    "prompt": chunk_prompt,
+                    "prompt": prompt,
                     "stream": False,
                     "options": {
-                        "temperature": 0.2,
-                        "top_p": 0.95,
-                        "num_predict": 512
+                        "temperature": 0.3,
+                        "top_p": 0.9,
+                        "num_predict": 400,
+                        "repeat_penalty": 1.2
                     }
                 },
-                timeout=60
+                timeout=90
             )
             
             if response.status_code == 200:
-                result = response.json().get("response", "")
-                if result and not result.isspace():
+                result = response.json().get("response", "").strip()
+                if result:
                     all_responses.append(result)
-            else:
-                print(f"Error processing chunk {i+1}: {response.text}")
-                continue
         
-        # Combine and clean responses
         combined_response = "\n".join(all_responses)
+        final_response = "\n".join(
+            line for line in combined_response.split("\n")
+            if line.strip() and not line.startswith("#")
+        )
         
-        # Clean up and deduplicate topics
-        seen_topics = set()
-        final_lines = []
-        
-        for line in combined_response.split('\n'):
-            line = line.strip()
-            if not line:
-                continue
-                
-            # Format and clean the line
-            if line.startswith('-') or line.startswith('•'):
-                line = line[1:].strip()
-                
-            # Process main topics (marked with **)
-            if line.startswith('**') and line.endswith('**'):
-                if line not in seen_topics:
-                    seen_topics.add(line)
-                    final_lines.append(line)
-            else:
-                # Process subtopics and details
-                if not line.startswith('*'):
-                    if ':' in line or line.isupper():
-                        line = f"**{line}**"
-                    else:
-                        line = f"*{line}*"
-                
-                if line not in seen_topics:
-                    seen_topics.add(line)
-                    final_lines.append(line)
-        
-        final_response = '\n'.join(final_lines)
-        
-        if not final_response.strip():
-            raise ValueError("No valid response generated from any chunk")
-            
         return final_response
         
     except Exception as e:
-        print(f"Error in generate_with_ollama: {str(e)}")
+        print(f"Erro na geração com Ollama: {e}")
         raise
-
+    
 class ProcessResponse(BaseModel):
     markdown: str
     original_text: str
