@@ -32,7 +32,9 @@ app.add_middleware(
     expose_headers=["Access-Control-Allow-Origin"],
 )
 
-# Env Variables
+
+# Env Variables (Uncomment if not using .env file)
+'''
 gemini_api_key = os.getenv("GEMINI_KEY")
 claude_api_key = os.getenv("CLAUDEAI_KEY")
 mistral_api_key= os.getenv("MISTRAL_KEY")
@@ -45,9 +47,11 @@ if not claude_api_key:
 if not mistral_api_key:
     raise ValueError("Erro: A chave MISTRAL_KEY não foi encontrada no ambiente ou no arquivo .env.")
 
+
 genai.configure(api_key=gemini_api_key)
 claude_client = anthropic.Anthropic(api_key=claude_api_key)
 mistral_client = MistralClient(api_key=mistral_api_key)
+'''
 
 class MindmapResponse(BaseModel):
     model_response: str
@@ -257,18 +261,19 @@ def generate_with_ollama(input_text: str, model_name: str = "tinyllama") -> str:
     try:
         ollama_url = os.getenv("OLLAMA_URL", "http://ollama:11434")
         
-        # Precise token estimation
-        chunks = chunk_text(input_text, max_chunk_size=4000)
+        # More precise token estimation
+        chunks = chunk_text(input_text, max_chunk_size=4000)  # Reduced chunk size for Ollama
         all_responses = []
         
-        system_prompt = """Crie uma estrutura de mapa mental concisa a partir do seguinte texto.
-        Formato:
-        - Tópicos principais em **Negrito**
-        - Subtópicos em *Itálico* 
-        - Foque nos pontos-chave"""
+        system_prompt = """Create a concise mind map structure. 
+        Format: 
+        - Main topics in **Bold**
+        - Subtopics in *Italics*
+        - Focus on key points"""
         
         for i, chunk in enumerate(chunks):
-            prompt = f"{system_prompt}\n{'Análise inicial de' if i == 0 else 'Continuar analisando'} este texto:\n{chunk}"
+            # Adaptive prompting based on chunk sequence
+            prompt = f"{system_prompt}\n{'Initial analysis of' if i == 0 else 'Continue analyzing'} this text:\n{chunk}"
             
             response = requests.post(
                 f"{ollama_url}/api/generate",
@@ -277,36 +282,42 @@ def generate_with_ollama(input_text: str, model_name: str = "tinyllama") -> str:
                     "prompt": prompt,
                     "stream": False,
                     "options": {
-                        "temperature": 0.3,
+                        "temperature": 0.3,  # Slightly more focused
                         "top_p": 0.9,
-                        "num_predict": 400,
-                        "repeat_penalty": 1.2
+                        "num_predict": 400,  # Adjusted prediction length
+                        "repeat_penalty": 1.2  # Reduce repetition
                     }
                 },
-                timeout=90
+                timeout=90  # Increased timeout
             )
             
             if response.status_code == 200:
                 result = response.json().get("response", "").strip()
                 if result:
                     all_responses.append(result)
-        
+            
+        # More sophisticated response aggregation
         combined_response = "\n".join(all_responses)
         final_response = "\n".join(
-            line for line in combined_response.split("\n")
+            line for line in combined_response.split("\n") 
             if line.strip() and not line.startswith("#")
         )
         
         return final_response
         
     except Exception as e:
-        print(f"Erro na geração com Ollama: {e}")
+        print(f"Ollama generation error: {e}")
         raise
-    
+
 class ProcessResponse(BaseModel):
     markdown: str
     original_text: str
     model_summary: str
+
+class APIKeys(BaseModel):
+    gemini_key: str
+    claude_key: str
+    mistral_key: str
 
 @app.post("/process-file")
 async def process_file(
@@ -314,8 +325,18 @@ async def process_file(
     pdf_file: UploadFile = File(None),
     audio_file: UploadFile = File(None),
     model: str = Form("gemini"),
-    ollama_model: str = Form("tinyllama")
+    ollama_model: str = Form("tinyllama"),
+    api_keys: str = Form(...)
 ):
+    # Configuração de chaves de API a partir do frontend
+    keys = json.loads(api_keys)
+    if model == "gemini":
+        genai.configure(api_key=keys['geminiKey'])
+    elif model == "claude":
+        claude_client = anthropic.Anthropic(api_key=keys['claudeKey'])
+    elif model == "mistral":
+        mistral_client = MistralClient(api_key=keys['mistralKey'])
+
     try:
         pdf_text = ""
         if pdf_file is not None:

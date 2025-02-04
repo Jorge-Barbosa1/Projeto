@@ -13,6 +13,7 @@ import "@react-pdf-viewer/search/lib/styles/index.css";
 import { zoomPlugin } from "@react-pdf-viewer/zoom";
 import "@react-pdf-viewer/zoom/lib/styles/index.css";
 import { ArrowForward } from "@mui/icons-material";
+import APIKeyManager from './components/APIKeyManager';
 import {
   TextField,
   Button,
@@ -92,11 +93,20 @@ function App() {
     }
   }, [markdown, activeTab]);
 
+  const [apiKeys, setApiKeys] = useState({
+    geminiKey: localStorage.getItem('geminiKey') || '',
+    claudeKey: localStorage.getItem('claudeKey') || '',
+    mistralKey: localStorage.getItem('mistralKey') || ''
+  });
+
   const handleSubmit = async (event) => {
+
+    
     event.preventDefault();
     const formData = new FormData();
     formData.append("prompt", prompt);
     formData.append("model", model);
+    formData.append("api_keys", JSON.stringify(apiKeys));
     if (pdfFile) formData.append("pdf_file", pdfFile);
     if (audioFile) formData.append("audio_file", audioFile);
 
@@ -131,6 +141,7 @@ function App() {
           flexDirection: 'column',
           gap: '20px'
         }}>
+          <APIKeyManager onKeysChange={setApiKeys} />
           <FormControl fullWidth>
             <InputLabel>Modelo</InputLabel>
             <Select
