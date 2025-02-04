@@ -101,12 +101,26 @@ function App() {
 
   const handleSubmit = async (event) => {
 
-    
+
+    if (model === "gemini" && !apiKeys.geminiKey) {
+      alert("É necessário definir a chave da Gemini antes de enviar.");
+      return;
+    }
+    if (model === "claude" && !apiKeys.claudeKey) {
+      alert("É necessário definir a chave do Claude antes de enviar.");
+      return;
+    }
+    if (model === "mistral" && !apiKeys.mistralKey) {
+      alert("É necessário definir a chave do Mistral antes de enviar.");
+      return;
+    }
+
     event.preventDefault();
     const formData = new FormData();
     formData.append("prompt", prompt);
     formData.append("model", model);
     formData.append("api_keys", JSON.stringify(apiKeys));
+    
     if (pdfFile) formData.append("pdf_file", pdfFile);
     if (audioFile) formData.append("audio_file", audioFile);
 
