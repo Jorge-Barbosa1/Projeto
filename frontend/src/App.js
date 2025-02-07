@@ -14,6 +14,7 @@ import { zoomPlugin } from "@react-pdf-viewer/zoom";
 import "@react-pdf-viewer/zoom/lib/styles/index.css";
 import { ArrowForward, Download } from "@mui/icons-material";
 import APIKeyManager from './components/APIKeyManager';
+import html2canvas from 'html2canvas';
 import {
   TextField,
   Button,
@@ -72,40 +73,50 @@ function App() {
 
   const svgRef = useRef(null);
 
-  const handleDownloadMindmap = () => {
+  const handleDownloadMindmap = async () => {
     if (!svgRef.current) return;
 
-    // Get the SVG element
-    const svgElement = svgRef.current;
-    const svgData = new XMLSerializer().serializeToString(svgElement);
+    try {
+      // Get the SVG container element
+      const svgContainer = svgRef.current.parentElement;
 
-    // Create a canvas
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+      // Ensure the container has a white background
+      const originalBackground = svgContainer.style.background;
+      svgContainer.style.background = 'white';
 
-    // Create an image to draw the SVG
-    const img = new Image();
-    img.onload = () => {
-      // Set canvas dimensions to match the SVG
-      canvas.width = svgElement.clientWidth;
-      canvas.height = svgElement.clientHeight;
+      // Use html2canvas to capture the entire SVG
+      const canvas = await html2canvas(svgContainer, {
+        backgroundColor: '#ffffff',
+        scale: 2, // Increase quality
+        logging: false,
+        width: svgContainer.scrollWidth,
+        height: svgContainer.scrollHeight,
+        allowTaint: false,
+        useCORS: true
+      });
 
-      // Draw white background
-      ctx.fillStyle = 'white';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Convert to blob
+      canvas.toBlob((blob) => {
+        // Create download link
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = 'mindmap.png';
+        link.href = url;
+        
+        // Trigger download
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Cleanup
+        URL.revokeObjectURL(url);
+        svgContainer.style.background = originalBackground;
+      }, 'image/png');
 
-      // Draw the image
-      ctx.drawImage(img, 0, 0);
-
-      // Convert to PNG and trigger download
-      const link = document.createElement('a');
-      link.download = 'mindmap.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    };
-
-    // Convert SVG to data URL
-    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+    } catch (error) {
+      console.error('Error during download:', error);
+      alert('Houve um erro ao gerar a imagem. Por favor, tente novamente.');
+    }
   };
 
   useEffect(() => {

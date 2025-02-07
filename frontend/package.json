@@ -15,6 +15,7 @@
     "axios": "^1.7.9",
     "cra-template": "1.2.0",
     "d3": "^7.9.0",
+    "html2canvas": "^1.4.1",
     "markmap-lib": "^0.18.8",
     "markmap-toolbar": "^0.18.8",
     "markmap-view": "^0.18.8",
