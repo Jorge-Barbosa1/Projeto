@@ -12,7 +12,7 @@ import { searchPlugin } from "@react-pdf-viewer/search";
 import "@react-pdf-viewer/search/lib/styles/index.css";
 import { zoomPlugin } from "@react-pdf-viewer/zoom";
 import "@react-pdf-viewer/zoom/lib/styles/index.css";
-import { ArrowForward } from "@mui/icons-material";
+import { ArrowForward, Download } from "@mui/icons-material";
 import APIKeyManager from './components/APIKeyManager';
 import {
   TextField,
@@ -22,6 +22,7 @@ import {
   FormControl,
   InputLabel,
   IconButton,
+  Tooltip,
 } from "@mui/material";
 
 function PDFViewer({ pdfUrl }) {
@@ -70,6 +71,42 @@ function App() {
   const [modelSummary, setModelSummary] = useState("");
 
   const svgRef = useRef(null);
+
+  const handleDownloadMindmap = () => {
+    if (!svgRef.current) return;
+
+    // Get the SVG element
+    const svgElement = svgRef.current;
+    const svgData = new XMLSerializer().serializeToString(svgElement);
+
+    // Create a canvas
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    // Create an image to draw the SVG
+    const img = new Image();
+    img.onload = () => {
+      // Set canvas dimensions to match the SVG
+      canvas.width = svgElement.clientWidth;
+      canvas.height = svgElement.clientHeight;
+
+      // Draw white background
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw the image
+      ctx.drawImage(img, 0, 0);
+
+      // Convert to PNG and trigger download
+      const link = document.createElement('a');
+      link.download = 'mindmap.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    };
+
+    // Convert SVG to data URL
+    img.src = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgData)));
+  };
 
   useEffect(() => {
     if (pdfFile) {
@@ -120,7 +157,7 @@ function App() {
     formData.append("prompt", prompt);
     formData.append("model", model);
     formData.append("api_keys", JSON.stringify(apiKeys));
-    
+
     if (pdfFile) formData.append("pdf_file", pdfFile);
     if (audioFile) formData.append("audio_file", audioFile);
 
@@ -251,6 +288,19 @@ function App() {
             >
               Resumo do modelo
             </Button>
+            {activeTab === 'mindmap' && markdown && (
+              <Tooltip title="Download Mind Map">
+                <IconButton
+                  onClick={handleDownloadMindmap}
+                  style={{
+                    margin: '8px',
+                    backgroundColor: '#f0f0f0'
+                  }}
+                >
+                  <Download />
+                </IconButton>
+              </Tooltip>
+            )}
           </div>
 
           {/* Content Area */}
