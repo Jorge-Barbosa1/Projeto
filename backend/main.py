@@ -237,54 +237,64 @@ Não adicione comentários extras ou legendas fora deste formato.
 def generate_with_ollama(input_text: str, model_name: str = "tinyllama") -> str:
     try:
         ollama_url = os.getenv("OLLAMA_URL", "http://ollama:11434")
-        
-        # More precise token estimation
-        chunks = chunk_text(input_text, max_chunk_size=4000)  # Reduced chunk size for Ollama
-        all_responses = []
-        
-        system_prompt = """Create a concise mind map structure. 
-        Format: 
-        - Main topics in **Bold**
-        - Subtopics in *Italics*
-        - Focus on key points"""
-        
-        for i, chunk in enumerate(chunks):
-            # Adaptive prompting based on chunk sequence
-            prompt = f"{system_prompt}\n{'Initial analysis of' if i == 0 else 'Continue analyzing'} this text:\n{chunk}"
-            
-            response = requests.post(
-                f"{ollama_url}/api/generate",
-                json={
-                    "model": model_name,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.3,  # Slightly more focused
-                        "top_p": 0.9,
-                        "num_predict": 400,  # Adjusted prediction length
-                        "repeat_penalty": 1.2  # Reduce repetition
-                    }
-                },
-                timeout=90  # Increased timeout
-            )
-            
-            if response.status_code == 200:
-                result = response.json().get("response", "").strip()
-                if result:
-                    all_responses.append(result)
-            
-        # More sophisticated response aggregation
-        combined_response = "\n".join(all_responses)
-        final_response = "\n".join(
-            line for line in combined_response.split("\n") 
-            if line.strip() and not line.startswith("#")
+
+        # Prompt exemplo de formatação
+        system_prompt = """Você é um assistente especializado em criar mapas mentais a partir de textos.
+Gere sua resposta usando exatamente este formato de hierarquia:
+
+**Tópico Principal**
+*Subtópico*
+- Detalhes/bullet points
+
+Exemplo de saída esperada (apenas exemplo, não repita no final):
+**Introdução**
+*Conceitos Básicos*
+- Definição
+- Contexto histórico
+*Motivação*
+- Razões para estudar este tema
+
+Importante:
+1. Não inclua introduções, disclaimers, ou texto fora do formato.
+2. Mantenha o texto focado, hierárquico e conciso.
+3. Não use cabeçalhos como "#" ou "##"; use apenas o formato acima.
+
+Texto para análise:
+"""
+
+        # Combina o texto do sistema com o texto que o usuário quer analisar
+        full_prompt = f"{system_prompt}\n{input_text}"
+
+        # Chamada POST para a API do Ollama
+        response = requests.post(
+            f"{ollama_url}/api/generate",
+            json={
+                "model": model_name,
+                "prompt": full_prompt,
+                "stream": False,
+                "options": {
+                    "temperature": 0.3,
+                    "top_p": 0.9,
+                    "num_predict": 600,  # Ajuste conforme o tamanho esperado
+                    "repeat_penalty": 1.2
+                }
+            },
+            timeout=90
         )
-        
-        return final_response
-        
+
+        if response.status_code != 200:
+            print(f"Ollama API returned error {response.status_code}")
+            return "Erro ao se comunicar com Ollama."
+
+        # Extrai apenas o texto da resposta
+        result = response.json().get("response", "").strip()
+        return result
+
     except Exception as e:
         print(f"Ollama generation error: {e}")
         raise
+
+
 
 class ProcessResponse(BaseModel):
     markdown: str
