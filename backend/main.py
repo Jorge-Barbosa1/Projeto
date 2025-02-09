@@ -33,7 +33,7 @@ app.add_middleware(
 )
 
 
-# Env Variables (Uncomment if not using .env file)
+# Env Variables (Uncomment if using .env file)
 '''
 gemini_api_key = os.getenv("GEMINI_KEY")
 claude_api_key = os.getenv("CLAUDEAI_KEY")
@@ -185,77 +185,54 @@ def generate_with_claude(input_text: str) -> str:
         raise
 
 def generate_with_mistral(input_text: str) -> str:
+    """
+    Gera um mapa mental hierárquico usando o Mistral, sem chunking
+    e com instruções claras e exemplo de formatação no prompt.
+    """
     try:
-        # Split text into smaller chunks
-        chunks = chunk_text(input_text)
-        all_responses = []
-        
-        system_prompt = """Crie uma estrutura de mapa mental a partir do seguinte texto.
-            Formate a saída como uma estrutura hierárquica com:
-                -Tópicos principais marcados com 'Tópico'
-                -Subtópicos marcados com 'Subtópico'
-                -Detalhes adicionais em texto regular
-            Mantem a resposta concisa e focada nos pontos principais
-            """
+        # Prompt de sistema com instruções detalhadas e exemplo
+        system_prompt = """Você é um assistente que gera mapas mentais em formato hierárquico. 
+Siga EXATAMENTE o seguinte padrão de saída:
 
-        # Process each chunk
-        for i, chunk in enumerate(chunks):
-            # Estimate total tokens including prompts
-            total_tokens = estimate_tokens(system_prompt + chunk)
-            if total_tokens > 8000:  # If still too large, skip this chunk
-                print(f"Skipping chunk {i+1} due to size: {total_tokens} estimated tokens")
-                continue
+Tópico: <Título principal>
+Subtópico: <Título do Subtópico>
+- Detalhe/descrição
+- Detalhe/descrição
 
-            if i == 0:
-                chunk_prompt = f"Extract the main topics and subtopics from this text: {chunk}"
-            else:
-                chunk_prompt = f"Continue extracting topics from this part: {chunk}"
+Exemplo de resposta esperada:
 
-            messages = [
-                ChatMessage(role="system", content=system_prompt),
-                ChatMessage(role="user", content=chunk_prompt)
-            ]
+Tópico: Introdução
+Subtópico: Conceitos Básicos
+- Definição da área
+- Contexto histórico
+Subtópico: Motivação
+- Razões para estudar este tema
 
-            try:
-                chat_response = mistral_client.chat(
-                    model="mistral-small",  # Using smaller model for better token handling
-                    messages=messages
-                )
-                
-                response_text = chat_response.choices[0].message.content
-                all_responses.append(response_text)
-            except Exception as e:
-                print(f"Error processing chunk {i+1}: {e}")
-                continue
-        
-        # Combine responses and remove duplicates
-        combined_response = "\n".join(all_responses)
-        
-        # Clean up and deduplicate topics
-        seen_topics = set()
-        final_lines = []
-        
-        for line in combined_response.split('\n'):
-            line = line.strip()
-            if not line:
-                continue
-                
-            # For main topics (marked with **)
-            if line.startswith('**') and line.endswith('**'):
-                if line not in seen_topics:
-                    seen_topics.add(line)
-                    final_lines.append(line)
-            else:
-                # For subtopics and details
-                if line not in seen_topics:
-                    seen_topics.add(line)
-                    final_lines.append(line)
-        
-        return '\n'.join(final_lines)
-        
+Agora, crie um mapa mental para o texto que vou lhe enviar. 
+Não adicione comentários extras ou legendas fora deste formato.
+"""
+
+        # Prompt do usuário com o texto a ser analisado
+        user_prompt = f"Texto:\n{input_text}"
+
+        messages = [
+            ChatMessage(role="system", content=system_prompt),
+            ChatMessage(role="user", content=user_prompt)
+        ]
+
+        # Chamada ao Mistral (ajuste o modelo se necessário)
+        chat_response = mistral_client.chat(
+            model="mistral-small",  # ou outro modelo de sua preferência
+            messages=messages
+        )
+
+        response_text = chat_response.choices[0].message.content.strip()
+        return response_text
+
     except Exception as e:
-        print(f"Error with Mistral AI: {e}")
+        print(f"Erro com Mistral AI: {e}")
         raise
+
 
 def generate_with_ollama(input_text: str, model_name: str = "tinyllama") -> str:
     try:
@@ -333,8 +310,10 @@ async def process_file(
     if model == "gemini":
         genai.configure(api_key=keys['geminiKey'])
     elif model == "claude":
+        global claude_client  # declara como global
         claude_client = anthropic.Anthropic(api_key=keys['claudeKey'])
     elif model == "mistral":
+        global mistral_client  # declara como global
         mistral_client = MistralClient(api_key=keys['mistralKey'])
 
     try:

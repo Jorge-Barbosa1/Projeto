@@ -15,6 +15,7 @@ import "@react-pdf-viewer/zoom/lib/styles/index.css";
 import { ArrowForward, Download } from "@mui/icons-material";
 import APIKeyManager from './components/APIKeyManager';
 import html2canvas from 'html2canvas';
+import CircularProgress from '@mui/material/CircularProgress';
 import {
   TextField,
   Button,
@@ -70,6 +71,7 @@ function App() {
   const [model, setModel] = useState("gemini");
   const [activeTab, setActiveTab] = useState("pdf"); // pdf, mindmap, summary
   const [modelSummary, setModelSummary] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const svgRef = useRef(null);
 
@@ -77,17 +79,41 @@ function App() {
     if (!svgRef.current) return;
 
     try {
-      // Get the SVG container element
+      // Obtém o container que envolve o SVG
       const svgContainer = svgRef.current.parentElement;
 
-      // Ensure the container has a white background
+      // Garante que o container tenha position relative
+      const originalPosition = svgContainer.style.position;
+      if (!originalPosition || originalPosition === 'static') {
+        svgContainer.style.position = 'relative';
+      }
+
+      // Garante fundo branco
       const originalBackground = svgContainer.style.background;
       svgContainer.style.background = 'white';
 
-      // Use html2canvas to capture the entire SVG
+      // Cria o overlay com as informações
+      const now = new Date();
+      const formattedDate = now.toLocaleDateString('pt-PT');
+      const formattedTime = now.toLocaleTimeString('pt-PT');
+      const overlayText = `Gerado por: ${model} às ${formattedTime} do dia ${formattedDate}`;
+
+      const infoDiv = document.createElement("div");
+      infoDiv.innerText = overlayText;
+      infoDiv.style.position = "absolute";
+      infoDiv.style.bottom = "10px";
+      infoDiv.style.left = "10px";
+      infoDiv.style.backgroundColor = "rgba(255, 255, 255, 0.8)";
+      infoDiv.style.padding = "5px";
+      infoDiv.style.fontSize = "12px";
+      infoDiv.style.zIndex = "1000";
+
+      svgContainer.appendChild(infoDiv);
+
+      // Captura o container com o overlay
       const canvas = await html2canvas(svgContainer, {
         backgroundColor: '#ffffff',
-        scale: 2, // Increase quality
+        scale: 2,
         logging: false,
         width: svgContainer.scrollWidth,
         height: svgContainer.scrollHeight,
@@ -95,22 +121,21 @@ function App() {
         useCORS: true
       });
 
-      // Convert to blob
+      // Remove o overlay e restaura o background e o posicionamento original (se necessário)
+      svgContainer.removeChild(infoDiv);
+      svgContainer.style.background = originalBackground;
+      svgContainer.style.position = originalPosition;
+
+      // Converte para blob e realiza o download
       canvas.toBlob((blob) => {
-        // Create download link
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.download = 'mindmap.png';
         link.href = url;
-        
-        // Trigger download
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        
-        // Cleanup
         URL.revokeObjectURL(url);
-        svgContainer.style.background = originalBackground;
       }, 'image/png');
 
     } catch (error) {
@@ -118,6 +143,8 @@ function App() {
       alert('Houve um erro ao gerar a imagem. Por favor, tente novamente.');
     }
   };
+
+
 
   useEffect(() => {
     if (pdfFile) {
@@ -148,22 +175,29 @@ function App() {
   });
 
   const handleSubmit = async (event) => {
+    event.preventDefault();
 
+    // Limpa o mapa mental anterior
+    setMarkdown("");
+    // Inicia o indicador de loading
+    setLoading(true);
 
     if (model === "gemini" && !apiKeys.geminiKey) {
       alert("É necessário definir a chave da Gemini antes de enviar.");
+      setLoading(false);
       return;
     }
     if (model === "claude" && !apiKeys.claudeKey) {
       alert("É necessário definir a chave do Claude antes de enviar.");
+      setLoading(false);
       return;
     }
     if (model === "mistral" && !apiKeys.mistralKey) {
       alert("É necessário definir a chave do Mistral antes de enviar.");
+      setLoading(false);
       return;
     }
 
-    event.preventDefault();
     const formData = new FormData();
     formData.append("prompt", prompt);
     formData.append("model", model);
@@ -178,6 +212,8 @@ function App() {
       setModelSummary(response.data.model_summary);
     } catch (error) {
       console.error("Error generating mind map:", error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -186,13 +222,13 @@ function App() {
       display: 'flex',
       flexDirection: 'column',
       height: '100vh',
-      overflow: 'hidden',
+      overflow: 'auto',
       position: 'relative'
     }}>
       <div style={{
         display: 'flex',
         flex: 1,
-        overflow: 'hidden'
+        overflow: 'auto'
       }}>
         {/* Left Panel */}
         <div style={{
@@ -315,7 +351,7 @@ function App() {
           </div>
 
           {/* Content Area */}
-          <div style={{ flex: 1, overflow: 'hidden' }}>
+          <div style={{ flex: 1, overflow: 'auto' }}>
             {activeTab === 'pdf' && pdfUrl && (
               <div style={{ height: '100%' }}>
                 <PDFViewer pdfUrl={pdfUrl} />
@@ -323,10 +359,17 @@ function App() {
             )}
 
             {activeTab === 'mindmap' && (
-              <div style={{ width: '100%', height: '100%' }}>
-                <svg ref={svgRef} style={{ width: '100%', height: '100%' }}></svg>
+              <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+                {loading ? (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+                    <CircularProgress />
+                  </div>
+                ) : (
+                  <svg ref={svgRef} style={{ width: '100%', height: '100%' }}></svg>
+                )}
               </div>
             )}
+
 
             {activeTab === 'summary' && (
               <div style={{
@@ -355,7 +398,7 @@ function App() {
         gap: '10px'
       }}>
         <TextField
-          label="Digite o prompt"
+          placeholder="Ex: Gera um mapa mental sobre o conteúdo do PDF"
           variant="outlined"
           multiline
           rows={2}
